@@ -12,26 +12,33 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./sfeos-web   # ← ADD THIS
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: ./sfeos-web/package-lock.json   # ← Optional but helps
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build React app
+      - name: Build
         run: npm run build
 
-      - name: Upload GitHub Pages artifact
+      - name: Fix SPA routing
+        run: cp build/index.html build/404.html
+
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./build
+          path: ./sfeos-web/build   # ← Point to subfolder
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy
         uses: actions/deploy-pages@v4
