@@ -14,6 +14,11 @@ import './SFEOSMap.css';
 
 const getInitialStacApiUrl = () => {
   if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramUrl = urlParams.get('stacApiUrl');
+    if (paramUrl) {
+      return paramUrl;
+    }
     const stored = window.localStorage.getItem('stacApiUrl');
     if (stored) {
       return stored;
