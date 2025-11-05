@@ -980,6 +980,12 @@ function SFEOSMap() {
         © <a href="https://maptiler.com/" target="_blank" rel="noopener noreferrer">MapTiler</a> | 
         © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
       </div>
+      {/* HH GH Logo in bottom right */}
+      <div className="hh-gh-logo">
+        <a href="https://github.com/Healy-Hyperspatial" target="_blank" rel="noopener noreferrer">
+          <img src={`${process.env.PUBLIC_URL}/assets/hh-gh-logo-dl.png`} alt="HH GH Logo" />
+        </a>
+      </div>
       <div className="left-panels-wrapper">
         <LogoOverlay />
         <StacClient stacApiUrl={stacApiUrl} />

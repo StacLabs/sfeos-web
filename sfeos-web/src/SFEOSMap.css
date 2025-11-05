@@ -276,3 +276,30 @@
 .map-attribution a:hover {
   text-decoration: underline;
 }
+
+/* HH GH Logo in bottom right corner */
+.hh-gh-logo {
+  position: absolute;
+  bottom: 20px;
+  right: 10px; /* Center 50px logo in 80px panel: 80/2 = 40 */
+  z-index: 1100;
+  pointer-events: auto;
+}
+
+.hh-gh-logo img {
+  max-height: 60px;
+  max-width: 60px;
+  height: auto;
+  width: auto;
+  opacity: 0.9;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.hh-gh-logo img:hover {
+  opacity: 1;
+  transform: scale(1.05);
+  filter: brightness(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
