@@ -1,7 +1,7 @@
 {
   "name": "sfeos-web",
   "version": "0.1.0",
-  "homepage": "https://healy-hyperspatial.github.io/sfeos-web",
+  "homepage": "https://healy-hyperspatial.github.io/sfeos-web/",
   "private": true,
   "dependencies": {
     "@maptiler/sdk": "^3.8.0",

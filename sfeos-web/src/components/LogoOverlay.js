@@ -5,7 +5,7 @@ const LogoOverlay = () => {
   return (
     <div className="logo-overlay">
       <img 
-        src="/assets/sfeos-logo.png" 
+        src={`${process.env.PUBLIC_URL}/assets/sfeos-logo.png`} 
         alt="SFEOS Logo"
         className="logo-image"
       />
