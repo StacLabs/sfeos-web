@@ -17,4 +17,9 @@
   max-width: 200px; /* Adjust size as needed */
   height: auto;
   display: block;
+  cursor: pointer;
+}
+
+.logo-image:hover {
+  /* No hover effects - just clickable */
 }
