@@ -573,6 +573,69 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     }
   };
 
+  const handleDownloadFeatureCollection = async () => {
+    try {
+      console.log('Starting download of feature collection...');
+
+      // Check if we have items to download
+      if (!queryItems || queryItems.length === 0) {
+        alert('No data to download. Please query some items first.');
+        return;
+      }
+
+      console.log('Reconstructing GeoJSON from', queryItems.length, 'processed items');
+
+      // Reconstruct GeoJSON FeatureCollection from processed items
+      const features = queryItems.map(item => ({
+        type: 'Feature',
+        id: item.id,
+        geometry: item.geometry,
+        bbox: item.bbox,
+        properties: {
+          datetime: item.datetime,
+          title: item.title
+        },
+        assets: item.assets || {},
+        links: item.links || []
+      }));
+
+      const geojsonData = {
+        type: 'FeatureCollection',
+        features: features,
+        numberReturned: features.length,
+        numberMatched: numberMatched || features.length
+      };
+
+      // Create filename
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      const collectionName = collection.id.replace(/[^a-zA-Z0-9-_]/g, '_');
+      const filename = `${collectionName}_items_${timestamp}.geojson`;
+
+      // Create and download the file
+      const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { type: 'application/geo+json' });
+      const url_blob = URL.createObjectURL(blob);
+
+      console.log('Created blob URL:', url_blob);
+      console.log('Filename:', filename);
+
+      const link = document.createElement('a');
+      link.href = url_blob;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(url_blob);
+      console.log('Download completed:', filename);
+
+      alert(`Downloaded ${features.length} items to ${filename}`);
+
+    } catch (error) {
+      console.error('Error downloading feature collection:', error);
+      alert(`Failed to download feature collection: ${error.message}`);
+    }
+  };
+
   return (
     <>
       {hasValidTemporalExtent && (
@@ -701,6 +764,18 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   }}
                 >
                   🔎
+                </button>
+                <button
+                  type="button"
+                  className="download-btn"
+                  title="Download feature collection as GeoJSON"
+                  aria-label="Download feature collection"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownloadFeatureCollection();
+                  }}
+                >
+                  ⬇️
                 </button>
                 <button
                   type="button"
