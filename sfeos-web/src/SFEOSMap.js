@@ -280,6 +280,11 @@ function SFEOSMap() {
         map.on('click', `geometry-fill-${id}`, (e) => {
           console.log('🖱️ Clicked on geometry:', id, itemData);
           
+          // Select the item in the list
+          window.dispatchEvent(new CustomEvent('selectItem', {
+            detail: { itemId: itemData.id }
+          }));
+          
           // Show item details overlay
           window.dispatchEvent(new CustomEvent('showItemDetails', {
             detail: {
