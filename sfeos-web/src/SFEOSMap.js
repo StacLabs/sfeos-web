@@ -1037,6 +1037,7 @@ function SFEOSMap() {
       </div>
       {mapThumbnail.url && (
         <MapThumbnailOverlay
+          key={`${mapThumbnail.url}-${Date.now()}`}
           mapRef={mapRef}
           itemGeometry={mapThumbnail.geometry}
           thumbnailUrl={mapThumbnail.url}
