@@ -33,7 +33,7 @@ jobs:
         run: npm run build
         env:
           REACT_APP_MAPTILER_KEY: ${{ secrets.MAPTILER_KEY }}
-          REACT_APP_STAC_API_URL: https://api.stac.worldpop.org
+          REACT_APP_STAC_API_URL: https://landsatlook.usgs.gov/stac-server
 
       - name: Fix SPA routing
         run: cp build/index.html build/404.html

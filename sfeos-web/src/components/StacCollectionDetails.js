@@ -16,6 +16,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   const [numberReturned, setNumberReturned] = useState(null);
   const [numberMatched, setNumberMatched] = useState(null);
   const [visibleThumbnailItemId, setVisibleThumbnailItemId] = useState(null);
+  const [itemLimitDisplay, setItemLimitDisplay] = useState(itemLimit.toString());
   const [isDatetimePickerOpen, setIsDatetimePickerOpen] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -31,6 +32,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
   useEffect(() => {
     itemLimitRef.current = itemLimit;
+    setItemLimitDisplay(itemLimit.toString());
   }, [itemLimit]);
 
   useEffect(() => {
@@ -47,6 +49,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       // Reset state when collection changes
       setIsQueryItemsVisible(false);
       setItemLimit(10);
+      setItemLimitDisplay('10');
       setQueryItems([]);
       setSelectedItemId(null);
       setIsDescriptionExpanded(false);
@@ -160,6 +163,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       setNumberReturned(null);
       setNumberMatched(null);
       setItemLimit(10);
+      setItemLimitDisplay('10');
     };
     window.addEventListener('resetStacCollectionDetails', handler);
     return () => window.removeEventListener('resetStacCollectionDetails', handler);
@@ -573,6 +577,69 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     }
   };
 
+  const handleDownloadFeatureCollection = async () => {
+    try {
+      console.log('Starting download of feature collection...');
+
+      // Check if we have items to download
+      if (!queryItems || queryItems.length === 0) {
+        alert('No data to download. Please query some items first.');
+        return;
+      }
+
+      console.log('Reconstructing GeoJSON from', queryItems.length, 'processed items');
+
+      // Reconstruct GeoJSON FeatureCollection from processed items
+      const features = queryItems.map(item => ({
+        type: 'Feature',
+        id: item.id,
+        geometry: item.geometry,
+        bbox: item.bbox,
+        properties: {
+          datetime: item.datetime,
+          title: item.title
+        },
+        assets: item.assets || {},
+        links: item.links || []
+      }));
+
+      const geojsonData = {
+        type: 'FeatureCollection',
+        features: features,
+        numberReturned: features.length,
+        numberMatched: numberMatched || features.length
+      };
+
+      // Create filename
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      const collectionName = collection.id.replace(/[^a-zA-Z0-9-_]/g, '_');
+      const filename = `${collectionName}_items_${timestamp}.geojson`;
+
+      // Create and download the file
+      const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { type: 'application/geo+json' });
+      const url_blob = URL.createObjectURL(blob);
+
+      console.log('Created blob URL:', url_blob);
+      console.log('Filename:', filename);
+
+      const link = document.createElement('a');
+      link.href = url_blob;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(url_blob);
+      console.log('Download completed:', filename);
+
+      alert(`Downloaded ${features.length} items to ${filename}`);
+
+    } catch (error) {
+      console.error('Error downloading feature collection:', error);
+      alert(`Failed to download feature collection: ${error.message}`);
+    }
+  };
+
   return (
     <>
       {hasValidTemporalExtent && (
@@ -704,6 +771,18 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 </button>
                 <button
                   type="button"
+                  className="download-btn"
+                  title="Download feature collection as GeoJSON"
+                  aria-label="Download feature collection"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownloadFeatureCollection();
+                  }}
+                >
+                  ⬇️
+                </button>
+                <button
+                  type="button"
                   className="bbox-btn"
                   disabled={!nextLink || isLoadingNext}
                   title={nextLink ? 'Load next page' : 'No more pages'}
@@ -719,19 +798,34 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
               <input 
                 id="item-limit"
                 className="limit-input"
-                type="number" 
-                min="1" 
-                max="200" 
-                value={itemLimit} 
+                type="text" 
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={itemLimitDisplay} 
                 onChange={(e) => {
-                  const next = parseInt(e.target.value || '10', 10);
-                  setItemLimit(next);
-                  try {
-                    window.dispatchEvent(new CustomEvent('itemLimitChanged', { detail: { limit: next } }));
-                  } catch (err) {
-                    console.warn('Failed to dispatch itemLimitChanged:', err);
+                  const value = e.target.value;
+                  // Allow empty string or valid digit sequences
+                  if (value === '' || /^\d+$/.test(value)) {
+                    setItemLimitDisplay(value);
                   }
-                }} 
+                }}
+                onBlur={() => {
+                  // On blur, validate and commit the value
+                  if (itemLimitDisplay === '' || !/^\d+$/.test(itemLimitDisplay)) {
+                    // Reset to current valid value
+                    setItemLimitDisplay(itemLimit.toString());
+                  } else {
+                    // Commit valid number, clamped to range
+                    const numValue = Math.min(200, Math.max(1, parseInt(itemLimitDisplay, 10)));
+                    setItemLimit(numValue);
+                    setItemLimitDisplay(numValue.toString());
+                    try {
+                      window.dispatchEvent(new CustomEvent('itemLimitChanged', { detail: { limit: numValue } }));
+                    } catch (err) {
+                      console.warn('Failed to dispatch itemLimitChanged:', err);
+                    }
+                  }
+                }}
               />
               <button
                 type="button"
