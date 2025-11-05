@@ -970,7 +970,16 @@ function SFEOSMap() {
         transformRequest={(url) => {
           return { url };
         }}
+        
+        // Attribution control - disable default attribution
+        attributionControl={false}
       />
+      {/* Custom attribution in bottom left */}
+      <div className="map-attribution">
+        <a href="https://maplibre.org/" target="_blank" rel="noopener noreferrer">MapLibre</a> | 
+        © <a href="https://maptiler.com/" target="_blank" rel="noopener noreferrer">MapTiler</a> | 
+        © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
+      </div>
       <div className="left-panels-wrapper">
         <LogoOverlay />
         <StacClient stacApiUrl={stacApiUrl} />
