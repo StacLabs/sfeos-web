@@ -16,6 +16,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   const [numberReturned, setNumberReturned] = useState(null);
   const [numberMatched, setNumberMatched] = useState(null);
   const [visibleThumbnailItemId, setVisibleThumbnailItemId] = useState(null);
+  const [itemLimitDisplay, setItemLimitDisplay] = useState(itemLimit.toString());
   const [isDatetimePickerOpen, setIsDatetimePickerOpen] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -31,6 +32,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
   useEffect(() => {
     itemLimitRef.current = itemLimit;
+    setItemLimitDisplay(itemLimit.toString());
   }, [itemLimit]);
 
   useEffect(() => {
@@ -47,6 +49,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       // Reset state when collection changes
       setIsQueryItemsVisible(false);
       setItemLimit(10);
+      setItemLimitDisplay('10');
       setQueryItems([]);
       setSelectedItemId(null);
       setIsDescriptionExpanded(false);
@@ -160,6 +163,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       setNumberReturned(null);
       setNumberMatched(null);
       setItemLimit(10);
+      setItemLimitDisplay('10');
     };
     window.addEventListener('resetStacCollectionDetails', handler);
     return () => window.removeEventListener('resetStacCollectionDetails', handler);
@@ -794,19 +798,34 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
               <input 
                 id="item-limit"
                 className="limit-input"
-                type="number" 
-                min="1" 
-                max="200" 
-                value={itemLimit} 
+                type="text" 
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={itemLimitDisplay} 
                 onChange={(e) => {
-                  const next = parseInt(e.target.value || '10', 10);
-                  setItemLimit(next);
-                  try {
-                    window.dispatchEvent(new CustomEvent('itemLimitChanged', { detail: { limit: next } }));
-                  } catch (err) {
-                    console.warn('Failed to dispatch itemLimitChanged:', err);
+                  const value = e.target.value;
+                  // Allow empty string or valid digit sequences
+                  if (value === '' || /^\d+$/.test(value)) {
+                    setItemLimitDisplay(value);
                   }
-                }} 
+                }}
+                onBlur={() => {
+                  // On blur, validate and commit the value
+                  if (itemLimitDisplay === '' || !/^\d+$/.test(itemLimitDisplay)) {
+                    // Reset to current valid value
+                    setItemLimitDisplay(itemLimit.toString());
+                  } else {
+                    // Commit valid number, clamped to range
+                    const numValue = Math.min(200, Math.max(1, parseInt(itemLimitDisplay, 10)));
+                    setItemLimit(numValue);
+                    setItemLimitDisplay(numValue.toString());
+                    try {
+                      window.dispatchEvent(new CustomEvent('itemLimitChanged', { detail: { limit: numValue } }));
+                    } catch (err) {
+                      console.warn('Failed to dispatch itemLimitChanged:', err);
+                    }
+                  }
+                }}
               />
               <button
                 type="button"
