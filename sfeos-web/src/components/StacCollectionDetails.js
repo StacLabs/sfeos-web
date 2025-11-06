@@ -249,7 +249,31 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return () => window.removeEventListener('showItemsOnMap', handler);
   }, []);
 
-  // Helper function to build API URL with datetime filter
+  // Listen for selectItem event from map clicks
+  useEffect(() => {
+    const handler = (event) => {
+      const itemId = event?.detail?.itemId;
+      if (itemId) {
+        console.log('Selecting item from map click:', itemId);
+        setSelectedItemId(itemId);
+        setVisibleThumbnailItemId(null);
+        
+        // Scroll the selected item into view
+        setTimeout(() => {
+          const selectedElement = document.querySelector(`[data-item-id="${itemId}"]`);
+          if (selectedElement) {
+            selectedElement.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'nearest',
+              inline: 'nearest' 
+            });
+          }
+        }, 100); // Small delay to ensure DOM updates
+      }
+    };
+    window.addEventListener('selectItem', handler);
+    return () => window.removeEventListener('selectItem', handler);
+  }, []);
   const buildItemsUrl = (baseUrl, collectionId, limit, datetimeFilter) => {
     let url = `${baseUrl}/collections/${collectionId}/items?limit=${limit}`;
     if (datetimeFilter) {
@@ -861,6 +885,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 {queryItems.map(item => (
                   <li 
                     key={item.id}
+                    data-item-id={item.id}
                     className={`item-list-item ${selectedItemId === item.id ? 'selected' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();

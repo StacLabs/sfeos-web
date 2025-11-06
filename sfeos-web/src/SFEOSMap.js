@@ -222,7 +222,7 @@ function SFEOSMap() {
 
   
   // Function to add a geometry to the map
-  const addGeometry = useCallback((map, id, geometry, color = '#FF0000', width = 2) => {
+  const addGeometry = useCallback((map, id, geometry, color = '#FF0000', width = 2, itemData = null) => {
     if (!map || !geometry) {
       console.warn('Invalid geometry in addGeometry:', geometry);
       return;
@@ -234,7 +234,10 @@ function SFEOSMap() {
     const geometryFeature = {
       type: 'Feature',
       geometry: geometry,
-      properties: { id }
+      properties: { 
+        id,
+        itemData
+      }
     };
     
     // Add the source if it doesn't exist
@@ -271,6 +274,57 @@ function SFEOSMap() {
           'fill-opacity': 0.1
         }
       });
+      
+      // Add click handler for item details if itemData is provided
+      if (itemData) {
+        map.on('click', `geometry-fill-${id}`, (e) => {
+          console.log('🖱️ Clicked on geometry:', id, itemData);
+          
+          // Select the item in the list
+          window.dispatchEvent(new CustomEvent('selectItem', {
+            detail: { itemId: itemData.id }
+          }));
+          
+          // Show item details overlay
+          window.dispatchEvent(new CustomEvent('showItemDetails', {
+            detail: {
+              id: itemData.id,
+              title: itemData.title || itemData.id,
+              datetime: itemData.datetime || null,
+              assetsCount: itemData.assetsCount || 0,
+              bbox: itemData.bbox || null
+            }
+          }));
+          
+          // Zoom to the item's bbox if available with better zoom level
+          if (itemData.bbox) {
+            const zoomEvent = new CustomEvent('zoomToBbox', { 
+              detail: { 
+                bbox: itemData.bbox,
+                options: {
+                  padding: 50,
+                  maxZoom: 18,
+                  essential: true
+                }
+              }
+            });
+            console.log('Zooming to item bbox:', itemData.bbox);
+            window.dispatchEvent(zoomEvent);
+          }
+          
+          // Prevent event bubbling
+          e.originalEvent.stopPropagation();
+        });
+        
+        // Change cursor on hover for visual feedback
+        map.on('mouseenter', `geometry-fill-${id}`, () => {
+          map.getCanvas().style.cursor = 'pointer';
+        });
+        
+        map.on('mouseleave', `geometry-fill-${id}`, () => {
+          map.getCanvas().style.cursor = '';
+        });
+      }
       
       // Track the layer IDs
       bboxLayers.current.add(`geometry-${id}`);
@@ -412,7 +466,8 @@ function SFEOSMap() {
         .filter(item => item?.geometry)
         .map(item => ({
           geometry: item.geometry,
-          id: item.id || `item-${Math.random().toString(36).substr(2, 9)}`
+          id: item.id || `item-${Math.random().toString(36).substr(2, 9)}`,
+          itemData: item // Store full item data for interactivity
         }));
         
       if (validGeometries.length === 0) {
@@ -463,14 +518,7 @@ function SFEOSMap() {
       
       console.log('Setting map view:', { centerLon, centerLat, zoom });
       
-      // Update view state
-      setViewState({
-        longitude: centerLon,
-        latitude: centerLat,
-        zoom: zoom
-      });
-      
-      // Use flyTo for smooth animation
+      // Use flyTo for smooth animation - don't set viewState manually as it conflicts
       map.flyTo({
         center: [centerLon, centerLat],
         zoom: zoom,
@@ -478,12 +526,22 @@ function SFEOSMap() {
         essential: true
       });
       
+      // Update view state after flyTo completes (flyTo will trigger onMove)
+      setTimeout(() => {
+        const center = map.getCenter();
+        setViewState({
+          longitude: center.lng,
+          latitude: center.lat,
+          zoom: map.getZoom()
+        });
+      }, 1100); // Slightly longer than flyTo duration
+      
       // Add geometry for each valid item
-      validGeometries.forEach(({ geometry, id }, index) => {
+      validGeometries.forEach(({ geometry, id, itemData }, index) => {
         const hue = (index * 137.5) % 360; // Golden angle for distinct colors
         const color = `hsl(${hue}, 80%, 50%)`;
         console.log(`🎨 Adding geometry for item ${index} (${id}):`, geometry);
-        addGeometry(map, id, geometry, color, 2);
+        addGeometry(map, id, geometry, color, 2, itemData);
       });
       
       console.log('✅ Map updated with', validGeometries.length, 'geometries');
