@@ -10,7 +10,7 @@ function StacClient({ stacApiUrl, onShowItemsOnMap: propOnShowItemsOnMap }) {
   const [error, setError] = useState(null);
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [rootCatalog, setRootCatalog] = useState(null);
-  const [isCatalogExpanded, setIsCatalogExpanded] = useState(true);
+  const [isCatalogDescriptionExpanded, setIsCatalogDescriptionExpanded] = useState(false);
 
   useEffect(() => {
     const fetchCollections = async () => {
@@ -92,35 +92,25 @@ function StacClient({ stacApiUrl, onShowItemsOnMap: propOnShowItemsOnMap }) {
     <div className="stac-client-container">
       {rootCatalog && (
         <div className="stac-catalog-header">
-          <button 
-            className="stac-expand-btn"
-            title={isCatalogExpanded ? "Hide catalog info" : "Show catalog info"}
-            onClick={() => setIsCatalogExpanded(!isCatalogExpanded)}
-          >
-            <span className="expand-arrow">{isCatalogExpanded ? '◀' : '▶'}</span>
-            <span className="expand-label">STAC Catalog</span>
-          </button>
-          {isCatalogExpanded && (
-            <div className="stac-details-expanded">
-              <div className="catalog-info-content">
-                <div className="catalog-title">
-                  <a href={stacApiUrl || 'http://localhost:8000'} target="_blank" rel="noopener noreferrer">
-                    {rootCatalog.title || rootCatalog.id}
-                  </a>
+          <button className="stac-expand-btn">
+            <div className="catalog-button-content">
+              <span className="expand-label">STAC Catalog</span>
+              {rootCatalog.description && (
+                <div 
+                  className="catalog-description-header"
+                  onClick={() => setIsCatalogDescriptionExpanded(!isCatalogDescriptionExpanded)}
+                >
+                  <span className="expand-arrow">{isCatalogDescriptionExpanded ? '▼' : '▶'}</span>
+                  <span className="catalog-section-title">Description</span>
                 </div>
-                {rootCatalog.stac_version && (
-                  <div className="catalog-version">
-                    STAC {rootCatalog.stac_version}
-                  </div>
-                )}
-                {rootCatalog.description && (
-                  <div className="catalog-description">
-                    {rootCatalog.description}
-                  </div>
-                )}
-              </div>
+              )}
+              {isCatalogDescriptionExpanded && rootCatalog.description && (
+                <div className="catalog-description-text">
+                  {rootCatalog.description}
+                </div>
+              )}
             </div>
-          )}
+          </button>
         </div>
       )}
 
