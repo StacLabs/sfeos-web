@@ -299,27 +299,18 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return features.map(item => {
       let thumbnailUrl = null;
       let thumbnailType = null;
-      console.log('🔍 Processing item:', item.id);
-      console.log('   Assets:', Object.keys(item.assets || {}));
       try {
         const assets = item.assets || {};
         const assetsArr = Object.values(assets);
         
         // Step 1: Check for assets.thumbnail
-        console.log('   Step 1 - Check assets.thumbnail:', !!assets.thumbnail);
-        if (assets.thumbnail) {
-          console.log('   assets.thumbnail object:', assets.thumbnail);
-          console.log('   assets.thumbnail.href:', assets.thumbnail.href);
-        }
         if (assets.thumbnail && assets.thumbnail.href) {
           thumbnailUrl = assets.thumbnail.href;
           thumbnailType = assets.thumbnail.type || null;
-          console.log('   ✅ Found thumbnail in assets.thumbnail:', thumbnailUrl);
         }
         
         // Step 2: Search for asset with role 'thumbnail' and image type
         if (!thumbnailUrl) {
-          console.log('   Step 2 - Search for thumbnail role with image type');
           const thumbAssetWeb = assetsArr.find(a => {
             const roles = Array.isArray(a.roles) ? a.roles : [];
             const type = (a.type || '').toLowerCase();
@@ -328,13 +319,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           if (thumbAssetWeb) {
             thumbnailUrl = thumbAssetWeb.href;
             thumbnailType = thumbAssetWeb.type || null;
-            console.log('   ✅ Found thumbnail with role and image type:', thumbnailUrl);
           }
         }
         
         // Step 3: Search for any asset with role 'thumbnail'
         if (!thumbnailUrl) {
-          console.log('   Step 3 - Search for any thumbnail role');
           const thumbAny = assetsArr.find(a => {
             const roles = Array.isArray(a.roles) ? a.roles : [];
             return roles.includes('thumbnail') && a.href;
@@ -342,27 +331,21 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           if (thumbAny) {
             thumbnailUrl = thumbAny.href;
             thumbnailType = thumbAny.type || null;
-            console.log('   ✅ Found thumbnail with role:', thumbnailUrl);
           }
         }
         
         // Step 4: Check links for thumbnail
         if (!thumbnailUrl && Array.isArray(item.links)) {
-          console.log('   Step 4 - Search links for thumbnail');
           const link = item.links.find(l => l.rel === 'thumbnail' || l.rel === 'preview');
           if (link && link.href) {
             thumbnailUrl = link.href;
             thumbnailType = link.type || null;
-            console.log('   ✅ Found thumbnail in links:', thumbnailUrl);
           }
-        }
-        
-        if (!thumbnailUrl) {
-          console.log('   ❌ No thumbnail found after all steps');
         }
       } catch (e) {
         console.warn('Error extracting thumbnail:', e);
       }
+      console.log(`Processed item ${item.id} with thumbnail ${thumbnailUrl}`);
       return {
         id: item.id,
         title: item.properties?.title || item.id,
@@ -554,7 +537,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       if (item.assets && item.assets.thumbnail && item.assets.thumbnail.href) {
         thumbnailUrl = item.assets.thumbnail.href;
         thumbnailType = item.assets.thumbnail.type;
-        console.log('✅ Found thumbnail in assets.thumbnail:', thumbnailUrl);
       }
       
       // Try 2: Search for any asset with role 'thumbnail'
@@ -565,7 +547,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         if (thumbAsset) {
           thumbnailUrl = thumbAsset.href;
           thumbnailType = thumbAsset.type;
-          console.log('✅ Found thumbnail in assets with role:', thumbnailUrl);
         }
       }
       
@@ -577,11 +558,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         if (thumbLink) {
           thumbnailUrl = thumbLink.href;
           thumbnailType = thumbLink.type;
-          console.log('✅ Found thumbnail in links:', thumbnailUrl);
         }
       }
-      
-      console.log('🖼️ Thumbnail URL for item', item.id, ':', thumbnailUrl);
       
       // Clear the item geometries from the map to hide the red square
       window.dispatchEvent(new CustomEvent('clearItemGeometries'));
@@ -594,7 +572,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           type: thumbnailType || null
         }
       });
-      console.log('Dispatching showItemThumbnail event');
       window.dispatchEvent(thumbEvent);
 
       // Show thumbnail on map if available and has geometry
@@ -607,7 +584,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             type: item.thumbnailType || null
           }
         });
-        console.log('Dispatching showMapThumbnail with geometry:', item.geometry);
         window.dispatchEvent(mapThumbEvent);
       }
     }
