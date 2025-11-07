@@ -126,11 +126,19 @@
   gap: 5px;
   margin-top: 8px;
   cursor: pointer;
-  width: 100%;
+  background: none;
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 6px;
+  padding: 2px 6px;
+  color: #001429;
+  font-size: 0.7rem;
+  transition: all 0.2s ease;
 }
 
 .catalog-description-header:hover {
-  opacity: 0.8;
+  background: rgba(0,0,0,0.05);
+  border-color: rgba(0,0,0,0.25);
+  color: #0056b3;
 }
 
 .catalog-description-header .expand-arrow {
@@ -139,22 +147,21 @@
 }
 
 .catalog-description-header .catalog-section-title {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: #333;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: inherit;
+  font-weight: 500;
+  color: inherit;
   margin: 0;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .catalog-description-text {
-  font-size: 0.65rem;
-  color: #555;
-  line-height: 1.3;
-  word-break: break-word;
-  margin-top: 6px;
-  padding-left: 4px;
-  text-align: left;
+  margin: 0 0 1px 0;
+  font-size: 0.6rem;
+  color: #666;
+  line-height: 1.4;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .catalog-button-content {
@@ -163,6 +170,12 @@
   align-items: flex-start;
   width: 100%;
   text-align: left;
+}
+
+.catalog-title-inline {
+  font-weight: 600;
+  color: #0056b3;
+  font-size: 0.7rem;
 }
 
 .stac-header {
