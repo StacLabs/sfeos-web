@@ -129,7 +129,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         } catch {}
         return merged;
       });
-      if (data.numberReturned != null) setNumberReturned(data.numberReturned);
+      if (data.numberReturned != null) setNumberReturned(prev => prev + (data.numberReturned || 0));
       if (data.numberMatched != null) setNumberMatched(data.numberMatched);
       try {
         const next = Array.isArray(data.links) ? data.links.find(l => l.rel === 'next' && l.href) : null;
@@ -273,6 +273,18 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     };
     window.addEventListener('selectItem', handler);
     return () => window.removeEventListener('selectItem', handler);
+  }, []);
+
+  // Listen for updateNextLink event from bbox searches
+  useEffect(() => {
+    const handler = (event) => {
+      const newNextLink = event?.detail?.nextLink;
+      if (newNextLink) {
+        setNextLink(newNextLink);
+      }
+    };
+    window.addEventListener('updateNextLink', handler);
+    return () => window.removeEventListener('updateNextLink', handler);
   }, []);
   const buildItemsUrl = (baseUrl, collectionId, limit, datetimeFilter) => {
     let url = `${baseUrl}/collections/${collectionId}/items?limit=${limit}`;
