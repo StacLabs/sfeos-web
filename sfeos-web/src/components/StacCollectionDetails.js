@@ -581,7 +581,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                       setItemLimitDisplay(itemLimit.toString());
                     } else {
                       // Commit valid number, clamped to range
-                      const numValue = Math.min(200, Math.max(1, parseInt(itemLimitDisplay, 10)));
+                      const numValue = Math.min(1000, Math.max(1, parseInt(itemLimitDisplay, 10)));
                       setItemLimit(numValue);
                       setItemLimitDisplay(numValue.toString());
                       try {
@@ -1235,7 +1235,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     setItemLimitDisplay(itemLimit.toString());
                   } else {
                     // Commit valid number, clamped to range
-                    const numValue = Math.min(200, Math.max(1, parseInt(itemLimitDisplay, 10)));
+                    const numValue = Math.min(1000, Math.max(1, parseInt(itemLimitDisplay, 10)));
                     setItemLimit(numValue);
                     setItemLimitDisplay(numValue.toString());
                     try {
