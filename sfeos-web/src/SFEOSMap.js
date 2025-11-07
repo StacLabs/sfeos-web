@@ -1004,6 +1004,13 @@ function SFEOSMap() {
             const features = Array.isArray(data.features) ? data.features : [];
             window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
             window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
+            
+            // Dispatch bbox search nextLink to update pagination
+            const bboxNextLink = data.links?.find(l => l.rel === 'next')?.href;
+            if (bboxNextLink) {
+              window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: bboxNextLink } }));
+            }
+            
             // Optionally exit draw mode after search
             setIsDrawingBbox(false);
           } catch (err) {
