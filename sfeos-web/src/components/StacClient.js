@@ -9,6 +9,8 @@ function StacClient({ stacApiUrl, onShowItemsOnMap: propOnShowItemsOnMap }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedCollection, setSelectedCollection] = useState(null);
+  const [rootCatalog, setRootCatalog] = useState(null);
+  const [isCatalogExpanded, setIsCatalogExpanded] = useState(true);
 
   useEffect(() => {
     const fetchCollections = async () => {
@@ -17,6 +19,20 @@ function StacClient({ stacApiUrl, onShowItemsOnMap: propOnShowItemsOnMap }) {
         setError(null);
 
         const baseUrl = stacApiUrl || getDefaultStacApiUrl();
+        
+        // Fetch root catalog
+        try {
+          const catalogResponse = await fetch(`${baseUrl}/`);
+          if (catalogResponse.ok) {
+            const catalogData = await catalogResponse.json();
+            setRootCatalog(catalogData);
+            console.log('Fetched root catalog:', catalogData);
+          }
+        } catch (catalogErr) {
+          console.warn('Could not fetch root catalog:', catalogErr);
+          setRootCatalog(null);
+        }
+
         const response = await fetch(`${baseUrl}/collections`);
         if (!response.ok) {
           throw new Error(`Failed to fetch collections: ${response.status}`);
@@ -73,16 +89,52 @@ function StacClient({ stacApiUrl, onShowItemsOnMap: propOnShowItemsOnMap }) {
   };
 
   return (
-    <StacCollectionSelector 
-      collections={collections}
-      loading={loading}
-      error={error}
-      selectedCollection={selectedCollection}
-      onCollectionChange={handleCollectionChange}
-      onZoomToBbox={handleZoomToBbox}
-      onShowItemsOnMap={handleShowItemsOnMap}
-      stacApiUrl={stacApiUrl}
-    />
+    <div className="stac-client-container">
+      {rootCatalog && (
+        <div className="stac-catalog-header">
+          <button 
+            className="stac-expand-btn"
+            title={isCatalogExpanded ? "Hide catalog info" : "Show catalog info"}
+            onClick={() => setIsCatalogExpanded(!isCatalogExpanded)}
+          >
+            <span className="expand-arrow">{isCatalogExpanded ? '◀' : '▶'}</span>
+            <span className="expand-label">STAC Catalog</span>
+          </button>
+          {isCatalogExpanded && (
+            <div className="stac-details-expanded">
+              <div className="catalog-info-content">
+                <div className="catalog-title">
+                  <a href={stacApiUrl || 'http://localhost:8000'} target="_blank" rel="noopener noreferrer">
+                    {rootCatalog.title || rootCatalog.id}
+                  </a>
+                </div>
+                {rootCatalog.stac_version && (
+                  <div className="catalog-version">
+                    STAC {rootCatalog.stac_version}
+                  </div>
+                )}
+                {rootCatalog.description && (
+                  <div className="catalog-description">
+                    {rootCatalog.description}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <StacCollectionSelector 
+        collections={collections}
+        loading={loading}
+        error={error}
+        selectedCollection={selectedCollection}
+        onCollectionChange={handleCollectionChange}
+        onZoomToBbox={handleZoomToBbox}
+        onShowItemsOnMap={handleShowItemsOnMap}
+        stacApiUrl={stacApiUrl}
+      />
+    </div>
   );
 }
 

@@ -833,6 +833,110 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     );
   }
 
+  // Check if this is a STAC Catalog instead of a Collection
+  if (collection && collection.type === "Catalog") {
+    // Extract child collections from links
+    const childCollections = collection.links ? collection.links.filter(link => link.rel === 'child') : [];
+    // Find the self link for the URL
+    const selfLink = collection.links ? collection.links.find(link => link.rel === 'self') : null;
+    
+    return (
+      <>
+        <div className="catalog-info" onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}>
+          <button 
+            className="stac-expand-btn"
+            title={isDescriptionExpanded ? "Hide catalog info" : "Show catalog info"}
+          >
+            <span className="expand-arrow">{isDescriptionExpanded ? '◀' : '▶'}</span>
+            <span className="expand-label">Catalog Info</span>
+          </button>
+          {isDescriptionExpanded && (
+            <div className="stac-details-expanded">
+              <h4>{collection.title || collection.id}</h4>
+              <div className="catalog-details">
+                <div className="catalog-detail-item">
+                  <span className="catalog-detail-key">Type:</span>
+                  <span className="catalog-detail-value">{collection.type}</span>
+                </div>
+                <div className="catalog-detail-item">
+                  <span className="catalog-detail-key">STAC Version:</span>
+                  <span className="catalog-detail-value">{collection.stac_version}</span>
+                </div>
+                <div className="catalog-detail-item">
+                  <span className="catalog-detail-key">ID:</span>
+                  <span className="catalog-detail-value">{collection.id}</span>
+                </div>
+                {selfLink && (
+                  <div className="catalog-detail-item">
+                    <span className="catalog-detail-key">URL:</span>
+                    <span className="catalog-detail-value">
+                      <a href={selfLink.href} target="_blank" rel="noopener noreferrer" className="catalog-url-link">
+                        {selfLink.href}
+                      </a>
+                    </span>
+                  </div>
+                )}
+                {collection.description && (
+                  <div className="catalog-description">
+                    <p>{collection.description}</p>
+                  </div>
+                )}
+                {collection.conformsTo && collection.conformsTo.length > 0 && (
+                  <div className="catalog-conformance">
+                    <h5>Conformance</h5>
+                    <ul>
+                      {collection.conformsTo.slice(0, 5).map((spec, index) => (
+                        <li key={index} className="conformance-item">
+                          {spec.split('/').pop()}
+                        </li>
+                      ))}
+                      {collection.conformsTo.length > 5 && (
+                        <li className="conformance-item">...and {collection.conformsTo.length - 5} more</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {childCollections.length > 0 && (
+          <div className="child-collections" onClick={() => setIsQueryItemsVisible(!isQueryItemsVisible)}>
+            <button 
+              className="stac-expand-btn"
+              title={isQueryItemsVisible ? "Hide child collections" : "Show child collections"}
+            >
+              <span className="expand-arrow">{isQueryItemsVisible ? '◀' : '▶'}</span>
+              <span className="expand-label">
+                Child Collections ({childCollections.length})
+              </span>
+            </button>
+            {isQueryItemsVisible && (
+              <div className="stac-details-expanded">
+                <h4>Available Collections</h4>
+                <ul className="collections-list">
+                  {childCollections.map((link, index) => (
+                    <li key={index} className="collection-item">
+                      <a 
+                        href={link.href} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="collection-link"
+                      >
+                        {link.title || link.href.split('/').pop() || `Collection ${index + 1}`}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </>
+    );
+  }
+
   const bbox = collection.extent?.spatial?.bbox?.[0];
   const hasValidBbox = bbox && bbox.length === 4;
 
