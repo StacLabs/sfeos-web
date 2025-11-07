@@ -108,8 +108,60 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         }
       };
       fetchItems();
+    } else if (collection === null) {
+      // "All Collections" mode - fetch from /search endpoint
+      console.log('Fetching items for All Collections');
+      const fetchAllCollections = async () => {
+        try {
+          const baseUrl = stacApiUrlRef.current || process.env.REACT_APP_STAC_API_BASE_URL || 'http://localhost:8080';
+          const currentLimit = itemLimitRef.current;
+          const datetimeFilter = appliedDatetimeFilterRef.current;
+          let url = `${baseUrl}/search?limit=${currentLimit}`;
+          if (datetimeFilter) {
+            url += `&datetime=${encodeURIComponent(datetimeFilter)}`;
+          }
+          console.log(`Fetching all collections from: ${url}`);
+          
+          const response = await fetch(url);
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Received all collections data:', data);
+            
+            // Capture search result counts
+            const nr = data?.numberReturned;
+            const nm = data?.numberMatched;
+            setNumberReturned(nr != null ? nr : (Array.isArray(data.features) ? data.features.length : null));
+            setNumberMatched(nm != null ? nm : null);
+            try {
+              const next = Array.isArray(data.links) ? data.links.find(l => l.rel === 'next' && l.href) : null;
+              setNextLink(next?.href || null);
+            } catch {}
+            
+            if (data.features && data.features.length > 0) {
+              const items = processItems(data.features);
+              
+              console.log('Setting all collections query items:', items);
+              setQueryItems(items);
+            } else {
+              console.log('No features found in all collections response');
+              setQueryItems([]);
+              setNextLink(null);
+            }
+          } else {
+            const errorText = await response.text();
+            console.error(`Failed to fetch all collections (${response.status}):`, errorText);
+            setQueryItems([]);
+            setNextLink(null);
+          }
+        } catch (error) {
+          console.error('Error fetching all collections:', error);
+          setQueryItems([]);
+          setNextLink(null);
+        }
+      };
+      fetchAllCollections();
     } else {
-      console.log('No collection ID available to fetch items');
+      console.log('No collection available to fetch items');
     }
   }, [collection]);
 
@@ -118,6 +170,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       e?.stopPropagation?.();
       if (!nextLink || isLoadingNext) return;
       setIsLoadingNext(true);
+      console.log('🔄 Loading next page:', nextLink, 'collection:', collection?.id || 'All Collections');
       const resp = await fetch(nextLink, { method: 'GET' });
       if (!resp.ok) throw new Error(`Next page failed: ${resp.status}`);
       const data = await resp.json();
@@ -175,12 +228,23 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       try {
         const lim = Number(event?.detail?.limit);
         if (!Number.isFinite(lim) || lim <= 0) return;
-        if (!collection || !collection.id) return;
         
-        console.log('🔎 refetchQueryItems triggered with limit:', lim);
+        console.log('🔎 refetchQueryItems triggered with limit:', lim, 'collection:', collection?.id || 'All Collections');
         const baseUrl = stacApiUrlRef.current || process.env.REACT_APP_STAC_API_BASE_URL || 'http://localhost:8080';
         const datetimeFilter = appliedDatetimeFilterRef.current;
-        const url = buildItemsUrl(baseUrl, collection.id, lim, datetimeFilter);
+        
+        let url;
+        if (collection && collection.id) {
+          // Regular collection-specific search
+          url = buildItemsUrl(baseUrl, collection.id, lim, datetimeFilter);
+        } else {
+          // All Collections search
+          url = `${baseUrl}/search?limit=${lim}`;
+          if (datetimeFilter) {
+            url += `&datetime=${encodeURIComponent(datetimeFilter)}`;
+          }
+        }
+        
         console.log('Fetching from:', url);
         
         const response = await fetch(url);
@@ -355,12 +419,355 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         thumbnailType,
         datetime: item.properties?.datetime || item.properties?.start_datetime || null,
         assetsCount: Object.keys(item.assets || {}).length,
-        assets: item.assets || {} // Keep raw assets for fallback
+        assets: item.assets || {},
+        collection: item.collection || null // Extract collection information
       };
     });
   };
 
-  if (!collection) return null;
+  // Handler for All Collections mode query items expand/collapse
+  const handleAllCollectionsQueryItemsClick = () => {
+    const newIsExpanded = !isQueryItemsVisible;
+    console.log('handleAllCollectionsQueryItemsClick called, newIsExpanded:', newIsExpanded);
+    
+    // Update the expanded state
+    setIsQueryItemsVisible(newIsExpanded);
+    
+    // Only proceed if we're expanding and have items
+    if (newIsExpanded && queryItems.length > 0) {
+      console.log('All Collections query items expanded, items:', queryItems);
+      
+      // Calculate bounding box that encompasses all items
+      let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+      let hasBbox = false;
+      
+      queryItems.forEach(item => {
+        if (item.bbox && item.bbox.length === 4) {
+          hasBbox = true;
+          minLon = Math.min(minLon, item.bbox[0]);
+          minLat = Math.min(minLat, item.bbox[1]);
+          maxLon = Math.max(maxLon, item.bbox[2]);
+          maxLat = Math.max(maxLat, item.bbox[3]);
+        }
+      });
+      
+      if (hasBbox) {
+        const combinedBbox = [minLon, minLat, maxLon, maxLat];
+        console.log('Zooming to combined bbox:', combinedBbox);
+        
+        // Create and dispatch the zoom event
+        const zoomEvent = new CustomEvent('zoomToBbox', { 
+          detail: { 
+            bbox: combinedBbox,
+            options: {
+              padding: 50,
+              maxZoom: 14,
+              essential: true  // Make this animation essential
+            }
+          } 
+        });
+        
+        // Log before dispatching
+        console.log('Dispatching zoomToBbox event:', zoomEvent);
+        window.dispatchEvent(zoomEvent);
+      }
+      
+      // Always call onShowItemsOnMap when there are items
+      if (onShowItemsOnMap) {
+        console.log('Calling onShowItemsOnMap with items');
+        onShowItemsOnMap(queryItems);
+      }
+    }
+  };
+
+  if (!collection) {
+    // "All Collections" mode - show simplified interface focused on query items
+    return (
+      <>
+        <div className="query-items">
+          <button 
+            className="stac-expand-btn"
+            title={isQueryItemsVisible ? "Hide query items" : "Show query items"}
+            onClick={handleAllCollectionsQueryItemsClick}
+          >
+            <span className="expand-arrow">{isQueryItemsVisible ? '◀' : '▶'}</span>
+            <span className="expand-label">
+              🌍 All Collections Query
+              {(numberReturned !== null || numberMatched !== null) && (
+                <span className="query-items-count">
+                  ({numberReturned !== null ? numberReturned : '?'}/{numberMatched !== null ? numberMatched : 'Not provided'})
+                </span>
+              )}
+            </span>
+          </button>
+          {isQueryItemsVisible && (
+            <div className="stac-details-expanded">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 5px 0' }}>Query All Collections</h4>
+                  {(numberReturned !== null || numberMatched !== null) && (
+                    <p className="query-items-results">
+                      {numberReturned !== null && numberMatched !== null
+                        ? `Returned: ${numberReturned} / Matched: ${numberMatched}`
+                        : numberReturned !== null
+                        ? `Returned: ${numberReturned} / Matched: Not provided`
+                        : numberMatched !== null
+                        ? `Matched: ${numberMatched}`
+                        : ''}
+                    </p>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    className="search-btn"
+                    title="Search (bbox if drawn, else query items)"
+                    aria-label="Search"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      try {
+                        window.dispatchEvent(new CustomEvent('runSearch', { detail: { limit: itemLimit } }));
+                      } catch (err) {
+                        console.warn('Failed to dispatch runSearch:', err);
+                      }
+                    }}
+                  >
+                    🔎
+                  </button>
+                  <button
+                    type="button"
+                    className="download-btn"
+                    title="Download feature collection as GeoJSON"
+                    aria-label="Download feature collection"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadFeatureCollection();
+                    }}
+                  >
+                    ⬇️
+                  </button>
+                  <button
+                    type="button"
+                    className="bbox-btn"
+                    disabled={!nextLink || isLoadingNext}
+                    title={nextLink ? 'Load next page' : 'No more pages'}
+                    aria-label="Load next page"
+                    onClick={handleLoadNext}
+                  >
+                    Next ▶
+                  </button>
+                </div>
+              </div>
+              <div className="limit-input-container">
+                <label htmlFor="item-limit">Limit:</label>
+                <input 
+                  id="item-limit"
+                  className="limit-input"
+                  type="text" 
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={itemLimitDisplay} 
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Allow empty string or valid digit sequences
+                    if (value === '' || /^\d+$/.test(value)) {
+                      setItemLimitDisplay(value);
+                    }
+                  }}
+                  onBlur={() => {
+                    // On blur, validate and commit the value
+                    if (itemLimitDisplay === '' || !/^\d+$/.test(itemLimitDisplay)) {
+                      // Reset to current valid value
+                      setItemLimitDisplay(itemLimit.toString());
+                    } else {
+                      // Commit valid number, clamped to range
+                      const numValue = Math.min(200, Math.max(1, parseInt(itemLimitDisplay, 10)));
+                      setItemLimit(numValue);
+                      setItemLimitDisplay(numValue.toString());
+                      try {
+                        window.dispatchEvent(new CustomEvent('itemLimitChanged', { detail: { limit: numValue } }));
+                      } catch (err) {
+                        console.warn('Failed to dispatch itemLimitChanged:', err);
+                      }
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className={`bbox-btn ${isBboxModeOn ? 'bbox-on' : 'bbox-off'}`}
+                  title="Toggle BBox draw mode"
+                  aria-label="Toggle BBox draw mode"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    try {
+                      window.dispatchEvent(new CustomEvent('toggleBboxSearch'));
+                    } catch (err) {
+                      console.warn('Failed to dispatch toggleBboxSearch:', err);
+                    }
+                  }}
+                >
+                  BBOX
+                </button>
+                <button
+                  type="button"
+                  className={`datetime-btn ${appliedDatetimeFilter ? 'datetime-active' : 'datetime-inactive'}`}
+                  title={appliedDatetimeFilter ? `Filter active: ${appliedDatetimeFilter}` : "Filter by datetime"}
+                  aria-label={appliedDatetimeFilter ? `Filter active: ${appliedDatetimeFilter}` : "Filter by datetime"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsDatetimePickerOpen(!isDatetimePickerOpen);
+                  }}
+                >
+                  📅
+                </button>
+              </div>
+              {queryItems.length > 0 ? (
+                <ul>
+                  {queryItems.map(item => (
+                    <li 
+                      key={item.id}
+                      data-item-id={item.id}
+                      className={`item-list-item ${selectedItemId === item.id ? 'selected' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleItemClick(item);
+                      }}
+                    >
+                      <span className="item-title">{item.title}</span>
+                      <button
+                        className={`preview-btn ${visibleThumbnailItemId === item.id ? 'active' : ''}`}
+                        title={visibleThumbnailItemId === item.id ? 'Hide thumbnail' : 'Show thumbnail'}
+                        aria-label={visibleThumbnailItemId === item.id ? 'Hide thumbnail' : 'Show thumbnail'}
+                        onClick={(e) => handleEyeButtonClick(e, item)}
+                      >
+                        👁
+                      </button>
+                      <button
+                        className="details-btn"
+                        title="Show item details"
+                        aria-label="Show item details"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const detailsEvent = new CustomEvent('showItemDetails', {
+                            detail: {
+                              id: item.id,
+                              title: item.title,
+                              datetime: item.datetime || null,
+                              assetsCount: item.assetsCount || 0,
+                              bbox: item.bbox || null,
+                              collection: item.collection || null
+                            }
+                          });
+                          window.dispatchEvent(detailsEvent);
+                        }}
+                      >
+                        📄
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No items found across all collections.</p>
+              )}
+            </div>
+          )}
+        </div>
+        {isDatetimePickerOpen && (
+          <div className="datetime-filter-box">
+            <div className="datetime-filter-header">
+              <h3>Filter by Date</h3>
+              <button 
+                className="datetime-filter-close"
+                onClick={() => setIsDatetimePickerOpen(false)}
+                aria-label="Close datetime filter"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="datetime-filter-content">
+              <div className="datetime-filter-group">
+                <label htmlFor="start-date">Start Date:</label>
+                <input
+                  id="start-date"
+                  type="datetime-local"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
+              <div className="datetime-filter-group">
+                <label htmlFor="end-date">End Date:</label>
+                <input
+                  id="end-date"
+                  type="datetime-local"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
+              <div className="datetime-filter-buttons">
+                <button
+                  type="button"
+                  className="datetime-apply-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Build datetime filter string in STAC format: start/end
+                    // Convert datetime-local format to ISO 8601 with Z suffix
+                    const formatDatetime = (dt) => {
+                      if (!dt) return null;
+                      // datetime-local format: "2025-01-15T10:30" -> ISO 8601: "2025-01-15T10:30:00Z"
+                      return dt.includes('T') ? `${dt}:00Z` : `${dt}T00:00:00Z`;
+                    };
+                    
+                    let datetimeFilter = '';
+                    const formattedStart = formatDatetime(startDate);
+                    const formattedEnd = formatDatetime(endDate);
+                    
+                    if (formattedStart && formattedEnd) {
+                      datetimeFilter = `${formattedStart}/${formattedEnd}`;
+                    } else if (formattedStart) {
+                      // Open-ended range: from start date to year 2200
+                      datetimeFilter = `${formattedStart}/2200-12-31T23:59:59Z`;
+                    } else if (formattedEnd) {
+                      // Open-ended range: from year 1800 to end date
+                      datetimeFilter = `1800-01-01T00:00:00Z/${formattedEnd}`;
+                    } else {
+                      // If neither start nor end date is selected, don't apply any filter
+                      datetimeFilter = '';
+                    }
+                    
+                    console.log('Datetime filter applied:', { startDate, endDate, formattedStart, formattedEnd, datetimeFilter });
+                    setAppliedDatetimeFilter(datetimeFilter);
+                    setIsDatetimePickerOpen(false);
+                    // Dispatch event so SFEOSMap can use the datetime filter in bbox searches
+                    window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter } }));
+                    // Trigger refetch with the new datetime filter
+                    window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                  }}
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  className="datetime-clear-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStartDate('');
+                    setEndDate('');
+                    setAppliedDatetimeFilter('');
+                    // Dispatch event so SFEOSMap knows the datetime filter was cleared
+                    window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter: '' } }));
+                    // Trigger refetch without datetime filter
+                    window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
 
   const bbox = collection.extent?.spatial?.bbox?.[0];
   const hasValidBbox = bbox && bbox.length === 4;
@@ -901,7 +1308,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                             title: item.title,
                             datetime: item.datetime || null,
                             assetsCount: item.assetsCount || 0,
-                            bbox: item.bbox || null
+                            bbox: item.bbox || null,
+                            collection: item.collection || collection?.id || null
                           }
                         });
                         window.dispatchEvent(detailsEvent);

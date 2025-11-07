@@ -14,16 +14,28 @@ function StacCollectionSelector({
 }) {
   const handleChange = (e) => {
     const collectionId = e.target.value;
-    const collection = collections.find(c => c.id === collectionId);
-    if (collection) {
-      // Close any open overlays when changing collections
+    if (collectionId === 'all-collections' || collectionId === '') {
+      // Special case for "All Collections" or placeholder selection - pass null collection
       try {
         window.dispatchEvent(new CustomEvent('hideOverlays'));
-        window.dispatchEvent(new CustomEvent('selectedCollectionChanged', { detail: { collectionId: collection.id } }));
+        window.dispatchEvent(new CustomEvent('selectedCollectionChanged', { detail: { collectionId: null } }));
       } catch (err) {
-        console.warn('Failed to dispatch hideOverlays on collection change:', err);
+        console.warn('Failed to dispatch hideOverlays on all-collections change:', err);
       }
-      onCollectionChange(collection);
+      onCollectionChange(null);
+    } else {
+      // Regular collection selection
+      const collection = collections.find(c => c.id === collectionId);
+      if (collection) {
+        // Close any open overlays when changing collections
+        try {
+          window.dispatchEvent(new CustomEvent('hideOverlays'));
+          window.dispatchEvent(new CustomEvent('selectedCollectionChanged', { detail: { collectionId: collection.id } }));
+        } catch (err) {
+          console.warn('Failed to dispatch hideOverlays on collection change:', err);
+        }
+        onCollectionChange(collection);
+      }
     }
   };
 
@@ -41,10 +53,11 @@ function StacCollectionSelector({
         <div className="stac-selector">
           <select 
             onChange={handleChange}
-            defaultValue=""
+            defaultValue={selectedCollection ? selectedCollection.id : ''}
             className="stac-select"
           >
             <option value="">Select a collection...</option>
+            <option value="all-collections">All Collections</option>
             {collections.map(collection => (
               <option key={collection.id} value={collection.id}>
                 {collection.id}
@@ -54,7 +67,7 @@ function StacCollectionSelector({
         </div>
       )}
 
-      {selectedCollection && (
+      {(
         <StacCollectionDetails 
           collection={selectedCollection}
           onZoomToBbox={onZoomToBbox}

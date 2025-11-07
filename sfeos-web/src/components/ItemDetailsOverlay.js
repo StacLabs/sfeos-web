@@ -3,7 +3,7 @@ import './ItemDetailsOverlay.css';
 
 function ItemDetailsOverlay({ details, onClose }) {
   if (!details) return null;
-  const { id, title, datetime, assetsCount, bbox } = details;
+  const { id, title, datetime, assetsCount, bbox, collection } = details;
 
   return (
     <div className="item-details-overlay" role="dialog" aria-label="STAC item details">
@@ -14,6 +14,9 @@ function ItemDetailsOverlay({ details, onClose }) {
         </div>
         <div className="details-body">
           <div className="details-row"><span className="label">ID:</span><span className="value" title={id}>{id}</span></div>
+          {collection && (
+            <div className="details-row"><span className="label">Collection:</span><span className="value" title={collection}>{collection}</span></div>
+          )}
           {datetime && (
             <div className="details-row"><span className="label">Datetime:</span><span className="value">{new Date(datetime).toISOString()}</span></div>
           )}
