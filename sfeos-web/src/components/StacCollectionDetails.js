@@ -502,8 +502,17 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     const newIsExpanded = !isQueryItemsVisible;
     console.log('handleAllCollectionsQueryItemsClick called, newIsExpanded:', newIsExpanded);
     
-    // Update the expanded state
     setIsQueryItemsVisible(newIsExpanded);
+    
+    // If expanding and we don't have items yet, trigger a refetch
+    if (newIsExpanded && queryItems.length === 0) {
+      console.log('Triggering initial fetch for All Collections');
+      setIsLoadingItems(true);
+      window.dispatchEvent(new CustomEvent('refetchQueryItems', { 
+        detail: { limit: itemLimitRef.current } 
+      }));
+      return;
+    }
     
     // Only proceed if we're expanding and have items
     if (newIsExpanded && queryItems.length > 0) {
@@ -556,21 +565,53 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     // "All Collections" mode - show simplified interface focused on query items
     return (
       <>
+        {isLoadingItems && (
+          <div style={{
+            position: 'fixed',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            padding: '10px 20px',
+            borderRadius: '20px',
+            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontSize: '14px',
+            fontWeight: 500
+          }}>
+            <span className="loading-spinner" style={{
+              display: 'inline-block',
+              width: '16px',
+              height: '16px',
+              border: '2px solid rgba(0, 0, 0, 0.1)',
+              borderRadius: '50%',
+              borderTopColor: '#0056b3',
+              animation: 'spin 1s linear infinite'
+            }} />
+            Loading items...
+          </div>
+        )}
         <div className="query-items">
-          <button 
-            className="stac-expand-btn"
-            title={isQueryItemsVisible ? "Hide query items" : "Show query items"}
-            onClick={handleAllCollectionsQueryItemsClick}
-          >
-            <span className="expand-label">
-              All Collections Query
-              {(numberReturned !== null || numberMatched !== null) && (
-                <span className="query-items-count">
-                  ({numberReturned !== null ? numberReturned : '?'}/{numberMatched !== null ? numberMatched : 'Not provided'})
-                </span>
-              )}
-            </span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              className="stac-expand-btn"
+              onClick={handleAllCollectionsQueryItemsClick}
+              disabled={isLoadingItems}
+            >
+              <span className="expand-label">
+                All Collections Query
+                {(numberReturned !== null || numberMatched !== null) && (
+                  <span className="query-items-count">
+                    ({numberReturned !== null ? numberReturned : '?'}/{numberMatched !== null ? numberMatched : 'Not provided'})
+                  </span>
+                )}
+              </span>
+              <span className="expand-arrow">{isQueryItemsVisible ? '▼' : '▶'}</span>
+            </button>
+          </div>
           {isQueryItemsVisible && (
             <div className="stac-details-expanded">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -1171,6 +1212,40 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
   return (
     <>
+      {isLoadingItems && (
+        <div style={{
+          position: 'fixed',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1000,
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          padding: '10px 20px',
+          borderRadius: '20px',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontSize: '14px',
+          fontWeight: 500
+        }}>
+          <span className="loading-spinner" style={{
+            display: 'inline-block',
+            width: '16px',
+            height: '16px',
+            border: '2px solid rgba(0, 0, 0, 0.1)',
+            borderRadius: '50%',
+            borderTopColor: '#0056b3',
+            animation: 'spin 1s linear infinite'
+          }} />
+          Loading items...
+        </div>
+      )}
+      <style jsx global>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
       {hasValidTemporalExtent && (
         <div className="temporal-extent" onClick={handleTemporalExtentClick}>
           <button 
@@ -1264,27 +1339,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             <span className="expand-label">Query Items</span>
             <span className="expand-arrow">{isQueryItemsVisible ? '▼' : '▶'}</span>
           </button>
-          {isLoadingItems && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              color: '#666',
-              fontSize: '14px',
-              marginLeft: '10px'
-            }}>
-              <span className="loading-spinner" style={{
-                display: 'inline-block',
-                width: '16px',
-                height: '16px',
-                border: '2px solid rgba(0, 0, 0, 0.1)',
-                borderRadius: '50%',
-                borderTopColor: '#0056b3',
-                animation: 'spin 1s linear infinite'
-              }} />
-              Loading...
-            </div>
-          )}
         </div>
         {isQueryItemsVisible && (
           <div className="stac-details-expanded">
