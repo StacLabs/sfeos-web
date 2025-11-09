@@ -92,30 +92,27 @@ function StacClient({ stacApiUrl, onShowItemsOnMap: propOnShowItemsOnMap }) {
     <div className="stac-client-container">
       {rootCatalog && (
         <div className="stac-catalog-header">
-          <button className="stac-expand-btn">
-            <div className="catalog-button-content">
-              <span className="catalog-main-title">STAC Catalog</span>
-              {rootCatalog.title && rootCatalog.title !== 'STAC Catalog' && (
-                <div className="catalog-title-display">
-                  {rootCatalog.title}
-                </div>
-              )}
-              {rootCatalog.description && (
-                <div 
-                  className="catalog-description-header"
-                  onClick={() => setIsCatalogDescriptionExpanded(!isCatalogDescriptionExpanded)}
-                >
-                  <span className="expand-arrow">{isCatalogDescriptionExpanded ? '▼' : '▶'}</span>
-                  <span className="catalog-section-title">Description</span>
-                </div>
-              )}
-              {isCatalogDescriptionExpanded && rootCatalog.description && (
-                <div className="catalog-description-text">
-                  {rootCatalog.description}
-                </div>
-              )}
-            </div>
-          </button>
+          <div className="catalog-header-content">
+            <div className="catalog-main-title">STAC Catalog</div>
+            {rootCatalog.title && rootCatalog.title !== 'STAC Catalog' && (
+              <div className="catalog-title-display">
+                {rootCatalog.title}
+              </div>
+            )}
+            {rootCatalog.description && (
+              <div 
+                className="catalog-description-header"
+                onClick={() => setIsCatalogDescriptionExpanded(!isCatalogDescriptionExpanded)}
+              >
+                <span className="catalog-section-title">Description</span>
+              </div>
+            )}
+            {isCatalogDescriptionExpanded && rootCatalog.description && (
+              <div className="catalog-description-text">
+                {rootCatalog.description}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
