@@ -94,7 +94,7 @@ function StacClient({ stacApiUrl, onShowItemsOnMap: propOnShowItemsOnMap }) {
         <div className="stac-catalog-header">
           <button className="stac-expand-btn">
             <div className="catalog-button-content">
-              <span className="expand-label">STAC Catalog</span>
+              <span className="catalog-main-title">STAC Catalog</span>
               {rootCatalog.title && rootCatalog.title !== 'STAC Catalog' && (
                 <div className="catalog-title-display">
                   {rootCatalog.title}
