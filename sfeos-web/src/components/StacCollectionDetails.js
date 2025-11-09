@@ -112,6 +112,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     } else if (collection === null) {
       // "All Collections" mode - fetch from /search endpoint
       console.log('Fetching items for All Collections');
+      setIsLoadingItems(true); // Set loading to true at the start
       const fetchAllCollections = async () => {
         try {
           const baseUrl = stacApiUrlRef.current || process.env.REACT_APP_STAC_API_BASE_URL || 'http://localhost:8080';
@@ -160,7 +161,9 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           setNextLink(null);
         }
       };
-      fetchAllCollections();
+      fetchAllCollections().finally(() => {
+        setIsLoadingItems(false); // Ensure loading is set to false when done
+      });
     } else {
       console.log('No collection available to fetch items');
     }
@@ -1243,26 +1246,46 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
       
       <div className="query-items">
-        <button
-          className="stac-expand-btn"
-          onClick={() => {
-            const newIsVisible = !isQueryItemsVisible;
-            setIsQueryItemsVisible(newIsVisible);
-            if (newIsVisible) {
-              // Only trigger refetch if we're showing the items
-              window.dispatchEvent(new CustomEvent('refetchQueryItems', { 
-                detail: { limit: itemLimitRef.current } 
-              }));
-            }
-          }}
-          disabled={isLoadingItems}
-        >
-          <span className="expand-label">Query Items</span>
-          <span className="expand-arrow">{isQueryItemsVisible ? '▼' : '▶'}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            className="stac-expand-btn"
+            onClick={() => {
+              const newIsVisible = !isQueryItemsVisible;
+              setIsQueryItemsVisible(newIsVisible);
+              if (newIsVisible) {
+                // Only trigger refetch if we're showing the items
+                window.dispatchEvent(new CustomEvent('refetchQueryItems', { 
+                  detail: { limit: itemLimitRef.current } 
+                }));
+              }
+            }}
+            disabled={isLoadingItems}
+          >
+            <span className="expand-label">Query Items</span>
+            <span className="expand-arrow">{isQueryItemsVisible ? '▼' : '▶'}</span>
+          </button>
           {isLoadingItems && (
-            <span className="loading-spinner" />
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              color: '#666',
+              fontSize: '14px',
+              marginLeft: '10px'
+            }}>
+              <span className="loading-spinner" style={{
+                display: 'inline-block',
+                width: '16px',
+                height: '16px',
+                border: '2px solid rgba(0, 0, 0, 0.1)',
+                borderRadius: '50%',
+                borderTopColor: '#0056b3',
+                animation: 'spin 1s linear infinite'
+              }} />
+              Loading...
+            </div>
           )}
-        </button>
+        </div>
         {isQueryItemsVisible && (
           <div className="stac-details-expanded">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
