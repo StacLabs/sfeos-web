@@ -243,8 +243,8 @@
   padding: 15px;  /* Match query items padding */
   border-radius: 3px;  /* Match query items border radius */
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);  /* Match query items shadow */
-  width: 239px;
-  max-width: calc(100vw - 40px);
+  width: 280px;
+  max-width: 100%;
   pointer-events: auto;
   box-sizing: border-box;  /* Ensure consistent sizing */
 }
