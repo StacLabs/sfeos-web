@@ -21,6 +21,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [appliedDatetimeFilter, setAppliedDatetimeFilter] = useState('');
+  const [isLoadingItems, setIsLoadingItems] = useState(false);
   const prevCollectionId = useRef(null);
   const stacApiUrlRef = useRef(stacApiUrl);
   const itemLimitRef = useRef(itemLimit);
@@ -226,10 +227,12 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   useEffect(() => {
     const handler = async (event) => {
       try {
-        const lim = Number(event?.detail?.limit);
+        const lim = Number(event?.detail?.limit || itemLimitRef.current);
         if (!Number.isFinite(lim) || lim <= 0) return;
         
         console.log('🔎 refetchQueryItems triggered with limit:', lim, 'collection:', collection?.id || 'All Collections');
+        setIsLoadingItems(true);
+        
         const baseUrl = stacApiUrlRef.current || process.env.REACT_APP_STAC_API_BASE_URL || 'http://localhost:8080';
         const datetimeFilter = appliedDatetimeFilterRef.current;
         
@@ -282,6 +285,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         }
       } catch (err) {
         console.error('refetchQueryItems error:', err);
+      } finally {
+        setIsLoadingItems(false);
       }
     };
     window.addEventListener('refetchQueryItems', handler);
@@ -1238,19 +1243,25 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
       
       <div className="query-items">
-        <button 
+        <button
           className="stac-expand-btn"
-          title={isQueryItemsVisible ? "Hide query items" : "Show query items"}
-          onClick={handleQueryItemsClick}
+          onClick={() => {
+            const newIsVisible = !isQueryItemsVisible;
+            setIsQueryItemsVisible(newIsVisible);
+            if (newIsVisible) {
+              // Only trigger refetch if we're showing the items
+              window.dispatchEvent(new CustomEvent('refetchQueryItems', { 
+                detail: { limit: itemLimitRef.current } 
+              }));
+            }
+          }}
+          disabled={isLoadingItems}
         >
-          <span className="expand-label">
-            Query Items
-            {(numberReturned !== null || numberMatched !== null) && (
-              <span className="query-items-count">
-                ({numberReturned !== null ? numberReturned : '?'}/{numberMatched !== null ? numberMatched : 'Not provided'})
-              </span>
-            )}
-          </span>
+          <span className="expand-label">Query Items</span>
+          <span className="expand-arrow">{isQueryItemsVisible ? '▼' : '▶'}</span>
+          {isLoadingItems && (
+            <span className="loading-spinner" />
+          )}
         </button>
         {isQueryItemsVisible && (
           <div className="stac-details-expanded">
