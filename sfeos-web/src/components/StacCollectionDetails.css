@@ -9,9 +9,8 @@ button.stac-expand-btn,
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   cursor: pointer;
-  padding: 2px 6px;
-  margin-top: 1px;
-  margin-bottom: 0;
+  padding: 4px 6px 1px 6px;
+  margin: 1px 0 0 0;
   border-radius: 6px;
   transition: all 0.2s ease;
   display: flex;
@@ -20,6 +19,7 @@ button.stac-expand-btn,
   width: 100%;
   box-sizing: border-box;
   text-align: left;
+  line-height: 1.2;
 }
 
 .stac-expand-btn:hover {
@@ -39,6 +39,9 @@ button.stac-expand-btn,
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1.0;
+  padding: 0;
+  margin: 0;
 }
 
 .description {

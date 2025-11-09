@@ -283,16 +283,17 @@
   color: #001429;
   font-size: 0.7rem;
   cursor: pointer;
-  padding: 2px 6px;
-  margin-top: 1px;
-  margin-bottom: 0;
+  padding: 4px 6px 4px 6px;
+  margin: 1px 0 0 0;
   border-radius: 6px;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
   gap: 5px;
-  width: auto;
+  width: 100%;
+  box-sizing: border-box;
   text-align: left;
+  line-height: 1.2;
 }
 
 .stac-catalog-header .catalog-description-header:hover {
