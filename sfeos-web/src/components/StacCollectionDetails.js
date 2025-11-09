@@ -296,7 +296,27 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return () => window.removeEventListener('refetchQueryItems', handler);
   }, [collection]);
 
-  // Listen for showItemsOnMap event to capture search result counts and update items list
+  // Listen for runSearch event to show loading indicator
+  useEffect(() => {
+    const handler = () => {
+      console.log('Bounding box search started, showing loading indicator');
+      setIsLoadingItems(true);
+    };
+    window.addEventListener('runSearch', handler);
+    return () => window.removeEventListener('runSearch', handler);
+  }, []);
+
+  // Listen for datetimeFilterChanged event to show loading indicator
+  useEffect(() => {
+    const handler = () => {
+      console.log('Datetime filter changed, showing loading indicator');
+      setIsLoadingItems(true);
+    };
+    window.addEventListener('datetimeFilterChanged', handler);
+    return () => window.removeEventListener('datetimeFilterChanged', handler);
+  }, []);
+
+  // Listen for showItemsOnMap event to update the items list and hide loading indicator
   useEffect(() => {
     const handler = (event) => {
       const numberReturned = event?.detail?.numberReturned;
@@ -316,6 +336,9 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         setQueryItems(processedItems);
         console.log('Query items updated from showItemsOnMap event:', processedItems.length, 'items');
       }
+      
+      // Always hide loading indicator when we get results
+      setIsLoadingItems(false);
     };
     window.addEventListener('showItemsOnMap', handler);
     return () => window.removeEventListener('showItemsOnMap', handler);
