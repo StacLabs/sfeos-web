@@ -860,6 +860,33 @@ function SFEOSMap() {
           console.log('numberMatched:', data.numberMatched);
           window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
           window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
+        } else if (bbox && bbox.length === 4 && selectedCollectionId === null) {
+          // All Collections bbox search
+          console.log('🔎 Searching all collections within drawn bbox');
+          const bboxParam = bbox.map(n => Number(n)).join(',');
+          console.log('Search params - bbox:', bboxParam, 'limit:', lim, 'all collections');
+          const baseUrl = stacApiUrlRef.current;
+          let url = `${baseUrl}/search?bbox=${encodeURIComponent(bboxParam)}&limit=${encodeURIComponent(lim)}`;
+          console.log('📅 Datetime filter ref value:', appliedDatetimeFilterRef.current);
+          if (appliedDatetimeFilterRef.current) {
+            url += `&datetime=${encodeURIComponent(appliedDatetimeFilterRef.current)}`;
+            console.log('✅ Datetime filter ADDED to URL');
+          } else {
+            console.log('⚠️ Datetime filter is EMPTY');
+          }
+          console.log('%c🔗 FULL API CALL (All Collections):', 'color: blue; font-weight: bold; font-size: 14px;');
+          console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
+          window.dispatchEvent(new CustomEvent('hideOverlays'));
+          const resp = await fetch(url, { method: 'GET' });
+          if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
+          const data = await resp.json();
+          const features = Array.isArray(data.features) ? data.features : [];
+          console.log('%c📊 ALL COLLECTIONS SEARCH RESULTS:', 'color: purple; font-weight: bold;');
+          console.log('Features returned:', features.length);
+          console.log('numberReturned:', data.numberReturned);
+          console.log('numberMatched:', data.numberMatched);
+          window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+          window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
         } else {
           // No bbox drawn, trigger re-fetch of query items with current limit
           console.log('🔎 No bbox, re-fetching query items with limit:', lim);
@@ -976,43 +1003,80 @@ function SFEOSMap() {
             e.originalEvent.stopPropagation();
           }
           setDragStartLngLat(null);
-          // Trigger GET /search?collections={id}&bbox=minLon,minLat,maxLon,maxLat
+          // Trigger GET /search?collections={id}&bbox=minLon,minLat,maxLon,maxLat or /search?bbox=... for all collections
           try {
             const bbox = currentBbox;
             if (!bbox || bbox.length !== 4) return;
-            if (!selectedCollectionId) {
-              console.warn('No collection selected; skipping bbox search');
-              return;
-            }
-            const bboxParam = bbox.map(n => Number(n)).join(',');
-            const limitParam = currentItemLimit;
-            const baseUrl = stacApiUrlRef.current;
-            let url = `${baseUrl}/search?collections=${encodeURIComponent(selectedCollectionId)}&bbox=${encodeURIComponent(bboxParam)}&limit=${encodeURIComponent(limitParam)}`;
-            console.log('📅 Datetime filter ref value (onMouseUp):', appliedDatetimeFilterRef.current);
-            if (appliedDatetimeFilterRef.current) {
-              url += `&datetime=${encodeURIComponent(appliedDatetimeFilterRef.current)}`;
-              console.log('✅ Datetime filter ADDED to URL');
+            
+            if (selectedCollectionId) {
+              // Single collection bbox search
+              console.log('🔎 Searching within drawn bbox for collection:', selectedCollectionId);
+              const bboxParam = bbox.map(n => Number(n)).join(',');
+              const limitParam = currentItemLimit;
+              const baseUrl = stacApiUrlRef.current;
+              let url = `${baseUrl}/search?collections=${encodeURIComponent(selectedCollectionId)}&bbox=${encodeURIComponent(bboxParam)}&limit=${encodeURIComponent(limitParam)}`;
+              console.log('📅 Datetime filter ref value (onMouseUp):', appliedDatetimeFilterRef.current);
+              if (appliedDatetimeFilterRef.current) {
+                url += `&datetime=${encodeURIComponent(appliedDatetimeFilterRef.current)}`;
+                console.log('✅ Datetime filter ADDED to URL');
+              } else {
+                console.log('⚠️ Datetime filter is EMPTY');
+              }
+              console.log('%c🔗 FULL API CALL (onMouseUp):', 'color: blue; font-weight: bold; font-size: 14px;');
+              console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
+              window.dispatchEvent(new CustomEvent('hideOverlays'));
+              const resp = await fetch(url, { method: 'GET' });
+              if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
+              const data = await resp.json();
+              const features = Array.isArray(data.features) ? data.features : [];
+              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+              window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
+              
+              // Dispatch bbox search nextLink to update pagination
+              const bboxNextLink = data.links?.find(l => l.rel === 'next')?.href;
+              if (bboxNextLink) {
+                window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: bboxNextLink } }));
+              }
+              
+              // Optionally exit draw mode after search
+              setIsDrawingBbox(false);
             } else {
-              console.log('⚠️ Datetime filter is EMPTY');
+              // All Collections bbox search
+              console.log('🔎 Searching all collections within drawn bbox');
+              const bboxParam = bbox.map(n => Number(n)).join(',');
+              const limitParam = currentItemLimit;
+              const baseUrl = stacApiUrlRef.current;
+              let url = `${baseUrl}/search?bbox=${encodeURIComponent(bboxParam)}&limit=${encodeURIComponent(limitParam)}`;
+              console.log('📅 Datetime filter ref value (onMouseUp):', appliedDatetimeFilterRef.current);
+              if (appliedDatetimeFilterRef.current) {
+                url += `&datetime=${encodeURIComponent(appliedDatetimeFilterRef.current)}`;
+                console.log('✅ Datetime filter ADDED to URL');
+              } else {
+                console.log('⚠️ Datetime filter is EMPTY');
+              }
+              console.log('%c🔗 FULL API CALL (All Collections onMouseUp):', 'color: blue; font-weight: bold; font-size: 14px;');
+              console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
+              window.dispatchEvent(new CustomEvent('hideOverlays'));
+              const resp = await fetch(url, { method: 'GET' });
+              if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
+              const data = await resp.json();
+              const features = Array.isArray(data.features) ? data.features : [];
+              console.log('%c📊 ALL COLLECTIONS SEARCH RESULTS (onMouseUp):', 'color: purple; font-weight: bold;');
+              console.log('Features returned:', features.length);
+              console.log('numberReturned:', data.numberReturned);
+              console.log('numberMatched:', data.numberMatched);
+              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+              window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
+              
+              // Dispatch bbox search nextLink to update pagination
+              const bboxNextLink = data.links?.find(l => l.rel === 'next')?.href;
+              if (bboxNextLink) {
+                window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: bboxNextLink } }));
+              }
+              
+              // Optionally exit draw mode after search
+              setIsDrawingBbox(false);
             }
-            console.log('%c🔗 FULL API CALL (onMouseUp):', 'color: blue; font-weight: bold; font-size: 14px;');
-            console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
-            window.dispatchEvent(new CustomEvent('hideOverlays'));
-            const resp = await fetch(url, { method: 'GET' });
-            if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
-            const data = await resp.json();
-            const features = Array.isArray(data.features) ? data.features : [];
-            window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
-            window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
-            
-            // Dispatch bbox search nextLink to update pagination
-            const bboxNextLink = data.links?.find(l => l.rel === 'next')?.href;
-            if (bboxNextLink) {
-              window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: bboxNextLink } }));
-            }
-            
-            // Optionally exit draw mode after search
-            setIsDrawingBbox(false);
           } catch (err) {
             console.error('Error performing bbox GET /search:', err);
           }

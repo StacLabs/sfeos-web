@@ -9,6 +9,8 @@ function StacClient({ stacApiUrl, onShowItemsOnMap: propOnShowItemsOnMap }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedCollection, setSelectedCollection] = useState(null);
+  const [rootCatalog, setRootCatalog] = useState(null);
+  const [isCatalogDescriptionExpanded, setIsCatalogDescriptionExpanded] = useState(false);
 
   useEffect(() => {
     const fetchCollections = async () => {
@@ -17,6 +19,20 @@ function StacClient({ stacApiUrl, onShowItemsOnMap: propOnShowItemsOnMap }) {
         setError(null);
 
         const baseUrl = stacApiUrl || getDefaultStacApiUrl();
+        
+        // Fetch root catalog
+        try {
+          const catalogResponse = await fetch(`${baseUrl}/`);
+          if (catalogResponse.ok) {
+            const catalogData = await catalogResponse.json();
+            setRootCatalog(catalogData);
+            console.log('Fetched root catalog:', catalogData);
+          }
+        } catch (catalogErr) {
+          console.warn('Could not fetch root catalog:', catalogErr);
+          setRootCatalog(null);
+        }
+
         const response = await fetch(`${baseUrl}/collections`);
         if (!response.ok) {
           throw new Error(`Failed to fetch collections: ${response.status}`);
@@ -73,16 +89,44 @@ function StacClient({ stacApiUrl, onShowItemsOnMap: propOnShowItemsOnMap }) {
   };
 
   return (
-    <StacCollectionSelector 
-      collections={collections}
-      loading={loading}
-      error={error}
-      selectedCollection={selectedCollection}
-      onCollectionChange={handleCollectionChange}
-      onZoomToBbox={handleZoomToBbox}
-      onShowItemsOnMap={handleShowItemsOnMap}
-      stacApiUrl={stacApiUrl}
-    />
+    <div className="stac-client-container">
+      {rootCatalog && (
+        <div className="stac-catalog-header">
+          <div className="catalog-header-content">
+            <div className="catalog-main-title">STAC Catalog</div>
+            {rootCatalog.title && rootCatalog.title !== 'STAC Catalog' && (
+              <div className="catalog-title-display">
+                {rootCatalog.title}
+              </div>
+            )}
+            {rootCatalog.description && (
+              <div 
+                className="catalog-description-header"
+                onClick={() => setIsCatalogDescriptionExpanded(!isCatalogDescriptionExpanded)}
+              >
+                <span className="catalog-section-title">Description</span>
+              </div>
+            )}
+            {isCatalogDescriptionExpanded && rootCatalog.description && (
+              <div className="catalog-description-text">
+                {rootCatalog.description}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <StacCollectionSelector 
+        collections={collections}
+        loading={loading}
+        error={error}
+        selectedCollection={selectedCollection}
+        onCollectionChange={handleCollectionChange}
+        onZoomToBbox={handleZoomToBbox}
+        onShowItemsOnMap={handleShowItemsOnMap}
+        stacApiUrl={stacApiUrl}
+      />
+    </div>
   );
 }
 
