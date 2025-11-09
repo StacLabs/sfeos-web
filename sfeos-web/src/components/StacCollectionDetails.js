@@ -554,7 +554,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             title={isQueryItemsVisible ? "Hide query items" : "Show query items"}
             onClick={handleAllCollectionsQueryItemsClick}
           >
-            <span className="expand-arrow">{isQueryItemsVisible ? '◀' : '▶'}</span>
             <span className="expand-label">
               All Collections Query
               {(numberReturned !== null || numberMatched !== null) && (
@@ -847,7 +846,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             className="stac-expand-btn"
             title={isDescriptionExpanded ? "Hide catalog info" : "Show catalog info"}
           >
-            <span className="expand-arrow">{isDescriptionExpanded ? '◀' : '▶'}</span>
             <span className="expand-label">Catalog Info</span>
           </button>
           {isDescriptionExpanded && (
@@ -907,7 +905,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
               className="stac-expand-btn"
               title={isQueryItemsVisible ? "Hide child collections" : "Show child collections"}
             >
-              <span className="expand-arrow">{isQueryItemsVisible ? '◀' : '▶'}</span>
               <span className="expand-label">
                 Child Collections ({childCollections.length})
               </span>
@@ -1172,7 +1169,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             className="stac-expand-btn"
             title={isTemporalExtentVisible ? "Hide temporal extent" : "Show temporal extent"}
           >
-            <span className="expand-arrow">{isTemporalExtentVisible ? '◀' : '▶'}</span>
             <span className="expand-label">
               Temporal Range
               {startTime && endTime && (
@@ -1204,7 +1200,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           className="stac-expand-btn"
           title={isDescriptionExpanded ? "Hide details" : "Show details"}
         >
-          <span className="expand-arrow">{isDescriptionExpanded ? '◀' : '▶'}</span>
           <span className="expand-label">Description</span>
         </button>
         {isDescriptionExpanded && (
@@ -1220,7 +1215,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           className="stac-expand-btn"
           title={isBoundingBoxVisible ? "Hide spatial extent" : "Show spatial extent"}
         >
-          <span className="expand-arrow">{isBoundingBoxVisible ? '◀' : '▶'}</span>
           <span className="expand-label">Spatial Extent</span>
         </button>
         {isBoundingBoxVisible && hasValidBbox && (
@@ -1249,7 +1243,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           title={isQueryItemsVisible ? "Hide query items" : "Show query items"}
           onClick={handleQueryItemsClick}
         >
-          <span className="expand-arrow">{isQueryItemsVisible ? '◀' : '▶'}</span>
           <span className="expand-label">
             Query Items
             {(numberReturned !== null || numberMatched !== null) && (
