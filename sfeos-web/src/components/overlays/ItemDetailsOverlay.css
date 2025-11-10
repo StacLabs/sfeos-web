@@ -71,3 +71,39 @@
   white-space: normal;
   word-break: break-word;
 }
+
+.properties-expanded {
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  font-size: 0.6rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.property-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2px;
+  word-break: break-word;
+}
+
+.property-key {
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+.property-value {
+  text-align: right;
+  flex: 1;
+}
+
+.properties-toggle {
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  cursor: pointer;
+}

@@ -292,7 +292,9 @@ function SFEOSMap() {
               title: itemData.title || itemData.id,
               datetime: itemData.datetime || null,
               assetsCount: itemData.assetsCount || 0,
-              bbox: itemData.bbox || null
+              bbox: itemData.bbox || null,
+              collection: itemData.collection || null,
+              properties: itemData.properties || {}
             }
           }));
           
@@ -858,7 +860,20 @@ function SFEOSMap() {
           console.log('Features returned:', features.length);
           console.log('numberReturned:', data.numberReturned);
           console.log('numberMatched:', data.numberMatched);
-          window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+          
+          // Process features to include properties and other metadata
+          const processedFeatures = features.map(item => ({
+            id: item.id,
+            title: item.properties?.title || item.id,
+            geometry: item.geometry || null,
+            bbox: item.bbox || null,
+            collection: item.collection || null,
+            properties: item.properties || {},
+            assetsCount: Object.keys(item.assets || {}).length,
+            datetime: item.properties?.datetime || item.properties?.start_datetime || null
+          }));
+          
+          window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
           window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
         } else if (bbox && bbox.length === 4 && selectedCollectionId === null) {
           // All Collections bbox search
@@ -885,7 +900,20 @@ function SFEOSMap() {
           console.log('Features returned:', features.length);
           console.log('numberReturned:', data.numberReturned);
           console.log('numberMatched:', data.numberMatched);
-          window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+          
+          // Process features to include properties and other metadata
+          const processedFeatures = features.map(item => ({
+            id: item.id,
+            title: item.properties?.title || item.id,
+            geometry: item.geometry || null,
+            bbox: item.bbox || null,
+            collection: item.collection || null,
+            properties: item.properties || {},
+            assetsCount: Object.keys(item.assets || {}).length,
+            datetime: item.properties?.datetime || item.properties?.start_datetime || null
+          }));
+          
+          window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
           window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
         } else {
           // No bbox drawn, trigger re-fetch of query items with current limit
@@ -1029,7 +1057,20 @@ function SFEOSMap() {
               if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
               const data = await resp.json();
               const features = Array.isArray(data.features) ? data.features : [];
-              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+              
+              // Process features to include properties and other metadata
+              const processedFeatures = features.map(item => ({
+                id: item.id,
+                title: item.properties?.title || item.id,
+                geometry: item.geometry || null,
+                bbox: item.bbox || null,
+                collection: item.collection || null,
+                properties: item.properties || {},
+                assetsCount: Object.keys(item.assets || {}).length,
+                datetime: item.properties?.datetime || item.properties?.start_datetime || null
+              }));
+              
+              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
               window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
               
               // Dispatch bbox search nextLink to update pagination

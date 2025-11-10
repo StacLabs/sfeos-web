@@ -75,7 +75,10 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           const response = await fetch(url);
           if (response.ok) {
             const data = await response.json();
-            console.log('Received items data:', data);
+            console.log('🔍 RAW API RESPONSE:', data);
+            console.log('🔍 First feature full:', data.features?.[0]);
+            console.log('🔍 First feature properties:', data.features?.[0]?.properties);
+            console.log('🔍 Properties keys count:', Object.keys(data.features?.[0]?.properties || {}).length);
             
             // Capture search result counts
             const nr = data?.numberReturned;
@@ -88,10 +91,15 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             } catch {}
             
             if (data.features && data.features.length > 0) {
+              console.log('Processing features with properties:', data.features.map(f => ({id: f.id, hasProps: !!f.properties, propKeys: Object.keys(f.properties || {})})));
               const items = processItems(data.features);
               
-              console.log('Setting query items:', items);
+              console.log('Processed items:', items);
+              console.log('First item properties:', items[0]?.properties);
               setQueryItems(items);
+              
+              // Also update the map with the new items for individual collections
+              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items } }));
             } else {
               console.log('No features found in the response');
               setQueryItems([]);
@@ -331,11 +339,13 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         setNumberMatched(numberMatched);
       }
       
-      // Update query items list when bbox search returns results
+      // Update query items list when items are received
       if (Array.isArray(items)) {
-        const processedItems = processItems(items);
+        // Always use the items as-is since they should already be processed
+        const processedItems = items;
         setQueryItems(processedItems);
         console.log('Query items updated from showItemsOnMap event:', processedItems.length, 'items');
+        console.log('First item properties:', processedItems[0]?.properties);
       }
       
       // Always hide loading indicator when we get results
@@ -395,18 +405,18 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
       console.log('Reconstructing GeoJSON from', queryItems.length, 'processed items');
 
-      // Reconstruct GeoJSON FeatureCollection from processed items
+      // Include complete STAC item data without filtering
       const features = queryItems.map(item => ({
         type: 'Feature',
         id: item.id,
         geometry: item.geometry,
         bbox: item.bbox,
-        properties: {
-          datetime: item.datetime,
-          title: item.title
-        },
+        properties: item.properties || {},
         assets: item.assets || {},
-        links: item.links || []
+        links: item.links || [],
+        collection: item.collection,
+        stac_version: item.stac_version,
+        stac_extensions: item.stac_extensions
       }));
 
       const geojsonData = {
@@ -456,6 +466,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
   // Helper function to process items from API response
   const processItems = (features) => {
+    console.log('Processing', features.length, 'features');
+    console.log('First feature properties:', features[0]?.properties);
     return features.map(item => {
       let thumbnailUrl = null;
       let thumbnailType = null;
@@ -505,7 +517,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       } catch (e) {
         console.warn('Error extracting thumbnail:', e);
       }
-      console.log(`Processed item ${item.id} with thumbnail ${thumbnailUrl}`);
+      console.log(`Processed item ${item.id} with properties:`, item.properties);
       return {
         id: item.id,
         title: item.properties?.title || item.id,
@@ -516,7 +528,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         datetime: item.properties?.datetime || item.properties?.start_datetime || null,
         assetsCount: Object.keys(item.assets || {}).length,
         assets: item.assets || {},
-        collection: item.collection || null // Extract collection information
+        collection: item.collection || null, // Extract collection information
+        properties: item.properties || {} // Include properties for display
       };
     });
   };
@@ -763,7 +776,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                               datetime: item.datetime || null,
                               assetsCount: item.assetsCount || 0,
                               bbox: item.bbox || null,
-                              collection: item.collection || null
+                              collection: item.collection || null,
+                              properties: item.properties || {}
                             }
                           });
                           window.dispatchEvent(detailsEvent);
@@ -1405,7 +1419,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                             datetime: item.datetime || null,
                             assetsCount: item.assetsCount || 0,
                             bbox: item.bbox || null,
-                            collection: item.collection || collection?.id || null
+                            collection: item.collection || collection?.id || null,
+                            properties: item.properties || {}
                           }
                         });
                         window.dispatchEvent(detailsEvent);
