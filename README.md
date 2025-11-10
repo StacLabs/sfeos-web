@@ -1,4 +1,5 @@
-# sfeos-web
+![SFEOS Logo](sfeos-web/public/assets/sfeos-logo.png)
+
 Front-facing web interface for [SFEOS](https://github.com/stac-utils/stac-fastapi-elasticsearch-opensearch) - stac-fastapi-elasticsearch-opensearch   
 
 https://healy-hypersaptial.github.io/sfeos-web
