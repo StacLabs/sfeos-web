@@ -27,7 +27,7 @@
 }
 
 .details-title {
-  font-size: 0.6rem;
+  font-size: 0.7rem;
   color: #333;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -53,7 +53,7 @@
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 6px;
-  font-size: 0.6rem;
+  font-size: 0.65rem;
 }
 
 .details-row .label {
