@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './StacCollectionDetails.css';
 import './QueryItems.css';
+import LoadingIndicator from './LoadingIndicator';
 
 function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, stacApiUrl }) {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -588,35 +589,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     // "All Collections" mode - show simplified interface focused on query items
     return (
       <>
-        {isLoadingItems && (
-          <div style={{
-            position: 'fixed',
-            bottom: '20px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 1000,
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-            padding: '10px 20px',
-            borderRadius: '20px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            fontSize: '14px',
-            fontWeight: 500
-          }}>
-            <span className="loading-spinner" style={{
-              display: 'inline-block',
-              width: '16px',
-              height: '16px',
-              border: '2px solid rgba(0, 0, 0, 0.1)',
-              borderRadius: '50%',
-              borderTopColor: '#0056b3',
-              animation: 'spin 1s linear infinite'
-            }} />
-            Loading items...
-          </div>
-        )}
+        {isLoadingItems && <LoadingIndicator message="Loading items..." />}
         <div className="query-items">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
@@ -1235,35 +1208,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
   return (
     <>
-      {isLoadingItems && (
-        <div style={{
-          position: 'fixed',
-          bottom: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 1000,
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          padding: '10px 20px',
-          borderRadius: '20px',
-          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          fontSize: '14px',
-          fontWeight: 500
-        }}>
-          <span className="loading-spinner" style={{
-            display: 'inline-block',
-            width: '16px',
-            height: '16px',
-            border: '2px solid rgba(0, 0, 0, 0.1)',
-            borderRadius: '50%',
-            borderTopColor: '#0056b3',
-            animation: 'spin 1s linear infinite'
-          }} />
-          Loading items...
-        </div>
-      )}
+      {isLoadingItems && <LoadingIndicator message="Loading items..." />}
       <style jsx global>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
