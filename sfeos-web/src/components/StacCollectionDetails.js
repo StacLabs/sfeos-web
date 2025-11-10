@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './StacCollectionDetails.css';
 import './QueryItems.css';
+import LoadingIndicator from './LoadingIndicator';
 
 function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, stacApiUrl }) {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -21,6 +22,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [appliedDatetimeFilter, setAppliedDatetimeFilter] = useState('');
+  const [isLoadingItems, setIsLoadingItems] = useState(false);
   const prevCollectionId = useRef(null);
   const stacApiUrlRef = useRef(stacApiUrl);
   const itemLimitRef = useRef(itemLimit);
@@ -111,6 +113,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     } else if (collection === null) {
       // "All Collections" mode - fetch from /search endpoint
       console.log('Fetching items for All Collections');
+      setIsLoadingItems(true); // Set loading to true at the start
       const fetchAllCollections = async () => {
         try {
           const baseUrl = stacApiUrlRef.current || process.env.REACT_APP_STAC_API_BASE_URL || 'http://localhost:8080';
@@ -159,7 +162,9 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           setNextLink(null);
         }
       };
-      fetchAllCollections();
+      fetchAllCollections().finally(() => {
+        setIsLoadingItems(false); // Ensure loading is set to false when done
+      });
     } else {
       console.log('No collection available to fetch items');
     }
@@ -226,10 +231,12 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   useEffect(() => {
     const handler = async (event) => {
       try {
-        const lim = Number(event?.detail?.limit);
+        const lim = Number(event?.detail?.limit || itemLimitRef.current);
         if (!Number.isFinite(lim) || lim <= 0) return;
         
         console.log('🔎 refetchQueryItems triggered with limit:', lim, 'collection:', collection?.id || 'All Collections');
+        setIsLoadingItems(true);
+        
         const baseUrl = stacApiUrlRef.current || process.env.REACT_APP_STAC_API_BASE_URL || 'http://localhost:8080';
         const datetimeFilter = appliedDatetimeFilterRef.current;
         
@@ -282,13 +289,35 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         }
       } catch (err) {
         console.error('refetchQueryItems error:', err);
+      } finally {
+        setIsLoadingItems(false);
       }
     };
     window.addEventListener('refetchQueryItems', handler);
     return () => window.removeEventListener('refetchQueryItems', handler);
   }, [collection]);
 
-  // Listen for showItemsOnMap event to capture search result counts and update items list
+  // Listen for runSearch event to show loading indicator
+  useEffect(() => {
+    const handler = () => {
+      console.log('Bounding box search started, showing loading indicator');
+      setIsLoadingItems(true);
+    };
+    window.addEventListener('runSearch', handler);
+    return () => window.removeEventListener('runSearch', handler);
+  }, []);
+
+  // Listen for datetimeFilterChanged event to show loading indicator
+  useEffect(() => {
+    const handler = () => {
+      console.log('Datetime filter changed, showing loading indicator');
+      setIsLoadingItems(true);
+    };
+    window.addEventListener('datetimeFilterChanged', handler);
+    return () => window.removeEventListener('datetimeFilterChanged', handler);
+  }, []);
+
+  // Listen for showItemsOnMap event to update the items list and hide loading indicator
   useEffect(() => {
     const handler = (event) => {
       const numberReturned = event?.detail?.numberReturned;
@@ -308,6 +337,9 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         setQueryItems(processedItems);
         console.log('Query items updated from showItemsOnMap event:', processedItems.length, 'items');
       }
+      
+      // Always hide loading indicator when we get results
+      setIsLoadingItems(false);
     };
     window.addEventListener('showItemsOnMap', handler);
     return () => window.removeEventListener('showItemsOnMap', handler);
@@ -494,8 +526,17 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     const newIsExpanded = !isQueryItemsVisible;
     console.log('handleAllCollectionsQueryItemsClick called, newIsExpanded:', newIsExpanded);
     
-    // Update the expanded state
     setIsQueryItemsVisible(newIsExpanded);
+    
+    // If expanding and we don't have items yet, trigger a refetch
+    if (newIsExpanded && queryItems.length === 0) {
+      console.log('Triggering initial fetch for All Collections');
+      setIsLoadingItems(true);
+      window.dispatchEvent(new CustomEvent('refetchQueryItems', { 
+        detail: { limit: itemLimitRef.current } 
+      }));
+      return;
+    }
     
     // Only proceed if we're expanding and have items
     if (newIsExpanded && queryItems.length > 0) {
@@ -548,21 +589,25 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     // "All Collections" mode - show simplified interface focused on query items
     return (
       <>
+        {isLoadingItems && <LoadingIndicator message="Loading items..." />}
         <div className="query-items">
-          <button 
-            className="stac-expand-btn"
-            title={isQueryItemsVisible ? "Hide query items" : "Show query items"}
-            onClick={handleAllCollectionsQueryItemsClick}
-          >
-            <span className="expand-label">
-              All Collections Query
-              {(numberReturned !== null || numberMatched !== null) && (
-                <span className="query-items-count">
-                  ({numberReturned !== null ? numberReturned : '?'}/{numberMatched !== null ? numberMatched : 'Not provided'})
-                </span>
-              )}
-            </span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              className="stac-expand-btn"
+              onClick={handleAllCollectionsQueryItemsClick}
+              disabled={isLoadingItems}
+            >
+              <span className="expand-label">
+                All Collections Query
+                {(numberReturned !== null || numberMatched !== null) && (
+                  <span className="query-items-count">
+                    ({numberReturned !== null ? numberReturned : '?'}/{numberMatched !== null ? numberMatched : 'Not provided'})
+                  </span>
+                )}
+              </span>
+              <span className="expand-arrow">{isQueryItemsVisible ? '▼' : '▶'}</span>
+            </button>
+          </div>
           {isQueryItemsVisible && (
             <div className="stac-details-expanded">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -1163,6 +1208,12 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
   return (
     <>
+      {isLoadingItems && <LoadingIndicator message="Loading items..." />}
+      <style jsx global>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
       {hasValidTemporalExtent && (
         <div className="temporal-extent" onClick={handleTemporalExtentClick}>
           <button 
@@ -1238,20 +1289,25 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
       
       <div className="query-items">
-        <button 
-          className="stac-expand-btn"
-          title={isQueryItemsVisible ? "Hide query items" : "Show query items"}
-          onClick={handleQueryItemsClick}
-        >
-          <span className="expand-label">
-            Query Items
-            {(numberReturned !== null || numberMatched !== null) && (
-              <span className="query-items-count">
-                ({numberReturned !== null ? numberReturned : '?'}/{numberMatched !== null ? numberMatched : 'Not provided'})
-              </span>
-            )}
-          </span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            className="stac-expand-btn"
+            onClick={() => {
+              const newIsVisible = !isQueryItemsVisible;
+              setIsQueryItemsVisible(newIsVisible);
+              if (newIsVisible) {
+                // Only trigger refetch if we're showing the items
+                window.dispatchEvent(new CustomEvent('refetchQueryItems', { 
+                  detail: { limit: itemLimitRef.current } 
+                }));
+              }
+            }}
+            disabled={isLoadingItems}
+          >
+            <span className="expand-label">Query Items</span>
+            <span className="expand-arrow">{isQueryItemsVisible ? '▼' : '▶'}</span>
+          </button>
+        </div>
         {isQueryItemsVisible && (
           <div className="stac-details-expanded">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
