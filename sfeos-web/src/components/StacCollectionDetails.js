@@ -1033,64 +1033,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     }
   };
 
-  const handleQueryItemsClick = () => {
-    const newIsExpanded = !isQueryItemsVisible;
-    console.log('handleQueryItemsClick called, newIsExpanded:', newIsExpanded);
-    
-    // Update the expanded state
-    setIsQueryItemsVisible(newIsExpanded);
-    
-    // Collapse other sections
-    if (isDescriptionExpanded) setIsDescriptionExpanded(false);
-    if (isBoundingBoxVisible) setIsBoundingBoxVisible(false);
-    
-    // Only proceed if we're expanding and have items
-    if (newIsExpanded && queryItems.length > 0) {
-      console.log('Query items expanded, items:', queryItems);
-      
-      // Calculate bounding box that encompasses all items
-      let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-      let hasBbox = false;
-      
-      queryItems.forEach(item => {
-        if (item.bbox && item.bbox.length === 4) {
-          hasBbox = true;
-          minLon = Math.min(minLon, item.bbox[0]);
-          minLat = Math.min(minLat, item.bbox[1]);
-          maxLon = Math.max(maxLon, item.bbox[2]);
-          maxLat = Math.max(maxLat, item.bbox[3]);
-        }
-      });
-      
-      if (hasBbox) {
-        const combinedBbox = [minLon, minLat, maxLon, maxLat];
-        console.log('Zooming to combined bbox:', combinedBbox);
-        
-        // Create and dispatch the zoom event
-        const zoomEvent = new CustomEvent('zoomToBbox', { 
-          detail: { 
-            bbox: combinedBbox,
-            options: {
-              padding: 50,
-              maxZoom: 14,
-              essential: true  // Make this animation essential
-            }
-          } 
-        });
-        
-        // Log before dispatching
-        console.log('Dispatching zoomToBbox event:', zoomEvent);
-        window.dispatchEvent(zoomEvent);
-      }
-      
-      // Always call onShowItemsOnMap when there are items
-      if (onShowItemsOnMap) {
-        console.log('Calling onShowItemsOnMap with items');
-        onShowItemsOnMap(queryItems);
-      }
-    }
-  };
-
   const handleItemClick = (item) => {
     console.log('Item clicked:', item);
     // Close any open overlays when selecting an item
