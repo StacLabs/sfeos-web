@@ -1,5 +1,7 @@
 # sfeos-web
-Front-facing web interface for [SFEOS](https://github.com/stac-utils/stac-fastapi-elasticsearch-opensearch) - stac-fastapi-elasticsearch-opensearch
+Front-facing web interface for [SFEOS](https://github.com/stac-utils/stac-fastapi-elasticsearch-opensearch) - stac-fastapi-elasticsearch-opensearch   
+
+https://healy-hypersaptial.github.io/sfeos-web
 
 ## Configuration
 
@@ -11,4 +13,4 @@ https://healy-hypersaptial.github.io/sfeos-web?stacApiUrl=http://localhost:8080
 
 **Note:** The parameter name `stacApiUrl` is case-sensitive.
 
-![Screenshot](Screenshot%202025-10-29%20134142.png)
+![Screenshot](Screenshot2025-11-10.png)
