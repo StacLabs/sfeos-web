@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getStyleUrl } from '../mapstyle';
+import { getStyleUrl } from '../../mapstyle';
 import './DarkModeToggle.css';
 
 function DarkModeToggle({ currentStyle, onStyleChange }) {

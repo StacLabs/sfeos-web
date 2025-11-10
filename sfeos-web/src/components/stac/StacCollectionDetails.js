@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './StacCollectionDetails.css';
 import './QueryItems.css';
-import LoadingIndicator from './LoadingIndicator';
+import LoadingIndicator from '../common/LoadingIndicator';
 
 function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, stacApiUrl }) {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
