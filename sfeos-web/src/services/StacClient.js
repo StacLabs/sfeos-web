@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import StacCollectionSelector from './StacCollectionSelector';
+import StacCollectionSelector from '../components/stac/StacCollectionSelector';
 
 const getDefaultStacApiUrl = () =>
   process.env.REACT_APP_STAC_API_URL || 'http://localhost:8000';

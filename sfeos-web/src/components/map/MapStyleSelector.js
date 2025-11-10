@@ -1,6 +1,6 @@
 import React from 'react';
 import { Form } from 'react-bootstrap';
-import { MAP_STYLES, getStyleUrl } from '../mapstyle';
+import { MAP_STYLES, getStyleUrl } from '../../mapstyle';
 import './MapStyleSelector.css';
 
 function MapStyleSelector({ value, onChange }) {

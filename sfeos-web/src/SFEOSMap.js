@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Map as MapLibreMap } from 'react-map-gl/maplibre';
-import LogoOverlay from './components/LogoOverlay';
-import ThumbnailOverlay from './components/ThumbnailOverlay';
-import ItemDetailsOverlay from './components/ItemDetailsOverlay';
-import MapStyleSelector from './components/MapStyleSelector';
-import DarkModeToggle from './components/DarkModeToggle';
-import StacClient from './components/StacClient';
-import UrlSearchBox from './components/UrlSearchBox';
-import MapThumbnailOverlay from './components/MapThumbnailOverlay';
+import LogoOverlay from './components/common/LogoOverlay';
+import ThumbnailOverlay from './components/overlays/ThumbnailOverlay';
+import ItemDetailsOverlay from './components/overlays/ItemDetailsOverlay';
+import MapStyleSelector from './components/map/MapStyleSelector';
+import DarkModeToggle from './components/common/DarkModeToggle';
+import StacClient from './services/StacClient';
+import UrlSearchBox from './services/UrlSearchBox';
+import MapThumbnailOverlay from './components/map/MapThumbnailOverlay';
 import './SFEOSMap.css';
 
 const getInitialStacApiUrl = () => {
