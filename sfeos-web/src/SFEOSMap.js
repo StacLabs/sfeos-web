@@ -1288,6 +1288,18 @@ function SFEOSMap() {
                   <span className="public-link-text">https://stac.terrascope.be</span>
                 </button>
               </li>
+              <li>
+                <button type="button" className="public-link-button" onClick={() => handleSwitchApi('https://explorer.digitalearth.africa/stac')} title="Use Digital Earth Africa STAC API">
+                  <span className="public-link-icon">🌍</span>
+                  <span className="public-link-text">https://explorer.digitalearth.africa/stac</span>
+                </button>
+              </li>
+              <li>
+                <button type="button" className="public-link-button" onClick={() => handleSwitchApi('https://earth-search.aws.element84.com/v1')} title="Use Earth Search by Element 84 STAC API">
+                  <span className="public-link-icon">☁️</span>
+                  <span className="public-link-text">https://earth-search.aws.element84.com/v1</span>
+                </button>
+              </li>
             </ul>
           </div>
         </div>
