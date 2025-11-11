@@ -1235,16 +1235,6 @@ function SFEOSMap() {
       </div>
       <div className="map-controls">
         <div className="control-section">
-          <div className="control-label">Globe</div>
-          <button 
-            className="fullscreen-btn"
-            onClick={() => setProjection(projection === 'mercator' ? 'globe' : 'mercator')}
-            title={projection === 'globe' ? "Switch to flat map" : "Switch to globe"}
-          >
-            {projection === 'globe' ? '🌍' : '🗺️'}
-          </button>
-        </div>
-        <div className="control-section">
           <div className="control-label">View</div>
           <button 
             className="fullscreen-btn"
@@ -1252,6 +1242,16 @@ function SFEOSMap() {
             title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
           >
             ⛶
+          </button>
+        </div>
+        <div className="control-section">
+          <div className="control-label">Globe</div>
+          <button 
+            className="fullscreen-btn"
+            onClick={() => setProjection(projection === 'mercator' ? 'globe' : 'mercator')}
+            title={projection === 'globe' ? "Switch to flat map" : "Switch to globe"}
+          >
+            {projection === 'globe' ? '🌍' : '🗺️'}
           </button>
         </div>
         <div className="control-section">
