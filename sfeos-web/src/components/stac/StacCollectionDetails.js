@@ -215,7 +215,10 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       const data = await resp.json();
       const newItems = processItems(Array.isArray(data.features) ? data.features : []);
       setQueryItems(prev => {
-        const merged = [...prev, ...newItems];
+        // Filter out duplicates by ID
+        const existingIds = new Set(prev.map(item => item.id));
+        const uniqueNewItems = newItems.filter(item => !existingIds.has(item.id));
+        const merged = [...prev, ...uniqueNewItems];
         try {
           window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: merged } }));
         } catch {}

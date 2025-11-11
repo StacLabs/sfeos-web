@@ -41,7 +41,7 @@ function SFEOSMap() {
   const [viewState, setViewState] = useState({
     longitude: 28.9784,
     latitude: 41.0151,
-    zoom: 12
+    zoom: 6
   });
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -103,6 +103,11 @@ function SFEOSMap() {
             type: projection,
           });
           console.log('Projection set to:', projection);
+          
+          // For globe view, set zoom to make it appear larger
+          if (projection === 'globe') {
+            map.setZoom(12);
+          }
         } catch (err) {
           console.warn('Error setting projection:', err);
         }
@@ -717,7 +722,7 @@ function SFEOSMap() {
     } catch (error) {
       console.error('Error in handleZoomToBbox:', error);
     }
-  }, []);
+  }, [projection]);
 
   // The zoom to bbox functionality is handled by the handleZoomToBbox function
 
@@ -1147,7 +1152,20 @@ function SFEOSMap() {
               const features = Array.isArray(data.features) ? data.features : [];
               console.log('%c📊 ALL COLLECTIONS SEARCH RESULTS (onMouseUp):', 'color: purple; font-weight: bold;');
               console.log('Features returned:', features.length);
-              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+              
+              // Process features to include properties and other metadata
+              const processedFeatures = features.map(item => ({
+                id: item.id,
+                title: item.properties?.title || item.id,
+                geometry: item.geometry || null,
+                bbox: item.bbox || null,
+                collection: item.collection || null,
+                properties: item.properties || {},
+                assetsCount: Object.keys(item.assets || {}).length,
+                datetime: item.properties?.datetime || item.properties?.start_datetime || null
+              }));
+              
+              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
               window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
               
               // Dispatch bbox search nextLink to update pagination
