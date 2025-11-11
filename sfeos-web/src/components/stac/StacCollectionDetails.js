@@ -1047,7 +1047,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     }
   };
 
-  const handleItemClick = (item) => {
+  function handleItemClick(item) {
     console.log('Item clicked:', item);
     // Close any open overlays when selecting an item
     try {
@@ -1080,7 +1080,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       console.log('Zooming to item bbox:', item.bbox);
       window.dispatchEvent(zoomEvent);
     }
-  };
+  }
 
   const handleEyeButtonClick = (e, item) => {
     e.stopPropagation();
