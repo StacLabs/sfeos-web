@@ -158,7 +158,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             }
           } else {
             const errorText = await response.text();
-            handleFetchError();
+            handleFetchError(errorText);
           }
         } catch (error) {
           handleFetchError();
@@ -193,7 +193,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             }
           } else {
             const errorText = await response.text();
-            handleFetchError();
+            handleFetchError(errorText);
           }
         } catch (error) {
           handleFetchError();
@@ -492,9 +492,14 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   };
 
   // Helper function to handle fetch errors
-  const handleFetchError = () => {
+  const handleFetchError = (errorMessage = '') => {
+    console.error('Error fetching items:', errorMessage || 'Unknown error');
     setQueryItems([]);
     setNextLink(null);
+    setNumberReturned(0);
+    setNumberMatched(0);
+    setIsLoadingItems(false);
+    setIsLoadingNext(false);
   };
 
   // Handler for All Collections mode query items expand/collapse
