@@ -144,15 +144,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           if (response.ok) {
             const data = await response.json();
             
-            // Capture search result counts
-            const nr = data?.numberReturned;
-            const nm = data?.numberMatched;
-            setNumberReturned(nr != null ? nr : (Array.isArray(data.features) ? data.features.length : null));
-            setNumberMatched(nm != null ? nm : null);
-            try {
-              const next = Array.isArray(data.links) ? data.links.find(l => l.rel === 'next' && l.href) : null;
-              setNextLink(next?.href || null);
-            } catch {}
+            captureSearchCounts(data);
+            extractNextLink(data);
             
             if (data.features && data.features.length > 0) {
               const items = processItems(data.features);
@@ -161,17 +154,14 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
               // Also update the map with the new items for individual collections
               window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items } }));
             } else {
-              setQueryItems([]);
-              setNextLink(null);
+              handleFetchError();
             }
           } else {
             const errorText = await response.text();
-            setQueryItems([]);
-            setNextLink(null);
+            handleFetchError();
           }
         } catch (error) {
-          setQueryItems([]);
-          setNextLink(null);
+          handleFetchError();
         }
       };
       fetchItems();
@@ -192,31 +182,21 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           if (response.ok) {
             const data = await response.json();
             
-            // Capture search result counts
-            const nr = data?.numberReturned;
-            const nm = data?.numberMatched;
-            setNumberReturned(nr != null ? nr : (Array.isArray(data.features) ? data.features.length : null));
-            setNumberMatched(nm != null ? nm : null);
-            try {
-              const next = Array.isArray(data.links) ? data.links.find(l => l.rel === 'next' && l.href) : null;
-              setNextLink(next?.href || null);
-            } catch {}
+            captureSearchCounts(data);
+            extractNextLink(data);
             
             if (data.features && data.features.length > 0) {
               const items = processItems(data.features);
               setQueryItems(items);
             } else {
-              setQueryItems([]);
-              setNextLink(null);
+              handleFetchError();
             }
           } else {
             const errorText = await response.text();
-            setQueryItems([]);
-            setNextLink(null);
+            handleFetchError();
           }
         } catch (error) {
-          setQueryItems([]);
-          setNextLink(null);
+          handleFetchError();
         }
       };
       fetchAllCollections().finally(() => {
@@ -307,15 +287,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         if (response.ok) {
           const data = await response.json();
           
-          // Capture search result counts (null-safe)
-          const rr = data?.numberReturned;
-          const rm = data?.numberMatched;
-          setNumberReturned(rr != null ? rr : (Array.isArray(data.features) ? data.features.length : null));
-          setNumberMatched(rm != null ? rm : null);
-          try {
-            const next = Array.isArray(data.links) ? data.links.find(l => l.rel === 'next' && l.href) : null;
-            setNextLink(next?.href || null);
-          } catch {}
+          captureSearchCounts(data);
+          extractNextLink(data);
           
           if (data.features && data.features.length > 0) {
             const items = processItems(data.features);
@@ -323,11 +296,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             setSelectedItemId(null);
             // Also update the map with the new items
             window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items } }));
-          } else {
-            setNextLink(null);
           }
-        } else {
-          setNextLink(null);
         }
       } catch (err) {
         // Error handled silently
@@ -504,6 +473,28 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       return `1800-01-01T00:00:00Z/${formattedEnd}`;
     }
     return '';
+  };
+
+  // Helper function to extract and set search result counts from API response
+  const captureSearchCounts = (data) => {
+    const nr = data?.numberReturned;
+    const nm = data?.numberMatched;
+    setNumberReturned(nr != null ? nr : (Array.isArray(data.features) ? data.features.length : null));
+    setNumberMatched(nm != null ? nm : null);
+  };
+
+  // Helper function to extract next link from API response
+  const extractNextLink = (data) => {
+    try {
+      const next = Array.isArray(data.links) ? data.links.find(l => l.rel === 'next' && l.href) : null;
+      setNextLink(next?.href || null);
+    } catch {}
+  };
+
+  // Helper function to handle fetch errors
+  const handleFetchError = () => {
+    setQueryItems([]);
+    setNextLink(null);
   };
 
   // Handler for All Collections mode query items expand/collapse
