@@ -2,7 +2,7 @@
 
 Front-facing web interface for [SFEOS](https://github.com/stac-utils/stac-fastapi-elasticsearch-opensearch) - stac-fastapi-elasticsearch-opensearch   
 
-https://healy-hypersaptial.github.io/sfeos-web
+https://healy-hyperspatial.github.io/sfeos-web
 
 ## Configuration
 
