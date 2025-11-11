@@ -76,18 +76,15 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         }
       }
     } catch (e) {
-      console.warn('Error extracting thumbnail:', e);
+      // Silently fail if thumbnail extraction fails
     }
     return { thumbnailUrl, thumbnailType };
   };
 
   // Helper function to process items from API response
   const processItems = useCallback((features) => {
-    console.log('Processing', features.length, 'features');
-    console.log('First feature properties:', features[0]?.properties);
     return features.map(item => {
       const { thumbnailUrl, thumbnailType } = extractThumbnail(item);
-      console.log(`Processed item ${item.id} with properties:`, item.properties);
       return {
         id: item.id,
         title: item.properties?.title || item.id,
@@ -120,7 +117,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   // Detect collection changes and reset state
   useEffect(() => {
     if (collection && collection.id && prevCollectionId.current !== collection.id) {
-      console.log(`Collection changed to: ${collection.id}`);
       prevCollectionId.current = collection.id;
       // Reset state when collection changes
       setIsQueryItemsVisible(false);
@@ -136,7 +132,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   // Fetch query items when the component mounts or collection changes
   useEffect(() => {
     if (collection && collection.id) {
-      console.log(`Fetching items for collection: ${collection.id}`);
       // Fetch items from the collection using STAC API
       const fetchItems = async () => {
         try {
@@ -144,15 +139,10 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           const currentLimit = itemLimitRef.current;
           const datetimeFilter = appliedDatetimeFilterRef.current;
           const url = buildItemsUrl(baseUrl, collection.id, currentLimit, datetimeFilter);
-          console.log(`Fetching items from: ${url}`);
           
           const response = await fetch(url);
           if (response.ok) {
             const data = await response.json();
-            console.log('🔍 RAW API RESPONSE:', data);
-            console.log('🔍 First feature full:', data.features?.[0]);
-            console.log('🔍 First feature properties:', data.features?.[0]?.properties);
-            console.log('🔍 Properties keys count:', Object.keys(data.features?.[0]?.properties || {}).length);
             
             // Capture search result counts
             const nr = data?.numberReturned;
@@ -165,28 +155,21 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             } catch {}
             
             if (data.features && data.features.length > 0) {
-              console.log('Processing features with properties:', data.features.map(f => ({id: f.id, hasProps: !!f.properties, propKeys: Object.keys(f.properties || {})})));
               const items = processItems(data.features);
-              
-              console.log('Processed items:', items);
-              console.log('First item properties:', items[0]?.properties);
               setQueryItems(items);
               
               // Also update the map with the new items for individual collections
               window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items } }));
             } else {
-              console.log('No features found in the response');
               setQueryItems([]);
               setNextLink(null);
             }
           } else {
             const errorText = await response.text();
-            console.error(`Failed to fetch items (${response.status}):`, errorText);
             setQueryItems([]);
             setNextLink(null);
           }
         } catch (error) {
-          console.error('Error fetching items:', error);
           setQueryItems([]);
           setNextLink(null);
         }
@@ -194,7 +177,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       fetchItems();
     } else if (collection === null) {
       // "All Collections" mode - fetch from /search endpoint
-      console.log('Fetching items for All Collections');
       setIsLoadingItems(true); // Set loading to true at the start
       const fetchAllCollections = async () => {
         try {
@@ -205,12 +187,10 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           if (datetimeFilter) {
             url += `&datetime=${encodeURIComponent(datetimeFilter)}`;
           }
-          console.log(`Fetching all collections from: ${url}`);
           
           const response = await fetch(url);
           if (response.ok) {
             const data = await response.json();
-            console.log('Received all collections data:', data);
             
             // Capture search result counts
             const nr = data?.numberReturned;
@@ -224,22 +204,17 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             
             if (data.features && data.features.length > 0) {
               const items = processItems(data.features);
-              
-              console.log('Setting all collections query items:', items);
               setQueryItems(items);
             } else {
-              console.log('No features found in all collections response');
               setQueryItems([]);
               setNextLink(null);
             }
           } else {
             const errorText = await response.text();
-            console.error(`Failed to fetch all collections (${response.status}):`, errorText);
             setQueryItems([]);
             setNextLink(null);
           }
         } catch (error) {
-          console.error('Error fetching all collections:', error);
           setQueryItems([]);
           setNextLink(null);
         }
@@ -247,8 +222,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       fetchAllCollections().finally(() => {
         setIsLoadingItems(false); // Ensure loading is set to false when done
       });
-    } else {
-      console.log('No collection available to fetch items');
     }
   }, [collection, processItems]);
 
@@ -257,7 +230,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       e?.stopPropagation?.();
       if (!nextLink || isLoadingNext) return;
       setIsLoadingNext(true);
-      console.log('🔄 Loading next page:', nextLink, 'collection:', collection?.id || 'All Collections');
       const resp = await fetch(nextLink, { method: 'GET' });
       if (!resp.ok) throw new Error(`Next page failed: ${resp.status}`);
       const data = await resp.json();
@@ -277,7 +249,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       } catch {}
       setIsLoadingNext(false);
     } catch (err) {
-      console.error('Error loading next page:', err);
       setIsLoadingNext(false);
     }
   };
@@ -296,7 +267,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   // Listen for resetStacCollectionDetails event to reset state
   useEffect(() => {
     const handler = () => {
-      console.log('🔄 Resetting StacCollectionDetails');
       setIsQueryItemsVisible(false);
       setQueryItems([]);
       setSelectedItemId(null);
@@ -316,7 +286,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         const lim = Number(event?.detail?.limit || itemLimitRef.current);
         if (!Number.isFinite(lim) || lim <= 0) return;
         
-        console.log('🔎 refetchQueryItems triggered with limit:', lim, 'collection:', collection?.id || 'All Collections');
         setIsLoadingItems(true);
         
         const baseUrl = stacApiUrlRef.current || process.env.REACT_APP_STAC_API_BASE_URL || 'http://localhost:8080';
@@ -334,13 +303,9 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           }
         }
         
-        console.log('Fetching from:', url);
-        
         const response = await fetch(url);
-        console.log('Response status:', response.status, 'ok:', response.ok);
         if (response.ok) {
           const data = await response.json();
-          console.log('Response data features count:', data.features?.length);
           
           // Capture search result counts (null-safe)
           const rr = data?.numberReturned;
@@ -353,24 +318,19 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           } catch {}
           
           if (data.features && data.features.length > 0) {
-            console.log('Processing', data.features.length, 'features');
             const items = processItems(data.features);
-            console.log('🔎 Fetched', items.length, 'items');
             setQueryItems(items);
             setSelectedItemId(null);
-            console.log('✅ Query items updated, now showing:', items.length);
             // Also update the map with the new items
             window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items } }));
           } else {
-            console.warn('No features in response');
             setNextLink(null);
           }
         } else {
-          console.error('Response not ok:', response.status);
           setNextLink(null);
         }
       } catch (err) {
-        console.error('refetchQueryItems error:', err);
+        // Error handled silently
       } finally {
         setIsLoadingItems(false);
       }
@@ -382,7 +342,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   // Listen for runSearch event to show loading indicator
   useEffect(() => {
     const handler = () => {
-      console.log('Bounding box search started, showing loading indicator');
       setIsLoadingItems(true);
     };
     window.addEventListener('runSearch', handler);
@@ -392,7 +351,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   // Listen for datetimeFilterChanged event to show loading indicator
   useEffect(() => {
     const handler = () => {
-      console.log('Datetime filter changed, showing loading indicator');
       setIsLoadingItems(true);
     };
     window.addEventListener('datetimeFilterChanged', handler);
@@ -418,8 +376,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         // Always use the items as-is since they should already be processed
         const processedItems = items;
         setQueryItems(processedItems);
-        console.log('Query items updated from showItemsOnMap event:', processedItems.length, 'items');
-        console.log('First item properties:', processedItems[0]?.properties);
       }
       
       // Always hide loading indicator when we get results
@@ -434,7 +390,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     const handler = (event) => {
       const itemId = event?.detail?.itemId;
       if (itemId) {
-        console.log('Selecting item from map click:', itemId);
         setSelectedItemId(itemId);
         setVisibleThumbnailItemId(null);
         
@@ -469,15 +424,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
   const handleDownloadFeatureCollection = async () => {
     try {
-      console.log('Starting download of feature collection...');
-
       // Check if we have items to download
       if (!queryItems || queryItems.length === 0) {
         alert('No data to download. Please query some items first.');
         return;
       }
-
-      console.log('Reconstructing GeoJSON from', queryItems.length, 'processed items');
 
       // Include complete STAC item data without filtering
       const features = queryItems.map(item => ({
@@ -509,9 +460,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { type: 'application/geo+json' });
       const url_blob = URL.createObjectURL(blob);
 
-      console.log('Created blob URL:', url_blob);
-      console.log('Filename:', filename);
-
       const link = document.createElement('a');
       link.href = url_blob;
       link.download = filename;
@@ -520,12 +468,10 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       document.body.removeChild(link);
 
       URL.revokeObjectURL(url_blob);
-      console.log('Download completed:', filename);
 
       alert(`Downloaded ${features.length} items to ${filename}`);
 
     } catch (error) {
-      console.error('Error downloading feature collection:', error);
       alert(`Failed to download feature collection: ${error.message}`);
     }
   };
@@ -563,13 +509,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   // Handler for All Collections mode query items expand/collapse
   const handleAllCollectionsQueryItemsClick = () => {
     const newIsExpanded = !isQueryItemsVisible;
-    console.log('handleAllCollectionsQueryItemsClick called, newIsExpanded:', newIsExpanded);
     
     setIsQueryItemsVisible(newIsExpanded);
     
     // If expanding and we don't have items yet, trigger a refetch
     if (newIsExpanded && queryItems.length === 0) {
-      console.log('Triggering initial fetch for All Collections');
       setIsLoadingItems(true);
       window.dispatchEvent(new CustomEvent('refetchQueryItems', { 
         detail: { limit: itemLimitRef.current } 
@@ -579,8 +523,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     
     // Only proceed if we're expanding and have items
     if (newIsExpanded && queryItems.length > 0) {
-      console.log('All Collections query items expanded, items:', queryItems);
-      
       // Calculate bounding box that encompasses all items
       let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
       let hasBbox = false;
@@ -597,7 +539,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       
       if (hasBbox) {
         const combinedBbox = [minLon, minLat, maxLon, maxLat];
-        console.log('Zooming to combined bbox:', combinedBbox);
         
         // Create and dispatch the zoom event
         const zoomEvent = new CustomEvent('zoomToBbox', { 
@@ -611,14 +552,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           } 
         });
         
-        // Log before dispatching
-        console.log('Dispatching zoomToBbox event:', zoomEvent);
         window.dispatchEvent(zoomEvent);
       }
       
       // Always call onShowItemsOnMap when there are items
       if (onShowItemsOnMap) {
-        console.log('Calling onShowItemsOnMap with items');
         onShowItemsOnMap(queryItems);
       }
     }
