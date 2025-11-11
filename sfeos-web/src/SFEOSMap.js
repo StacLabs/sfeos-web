@@ -55,6 +55,7 @@ function SFEOSMap() {
   const [stacApiUrl, setStacApiUrl] = useState(getInitialStacApiUrl);
   const [mapThumbnail, setMapThumbnail] = useState({ geometry: null, url: null, title: '', type: null });
   const [showPublicLinks, setShowPublicLinks] = useState(false);
+  const [projection, setProjection] = useState('mercator'); // 'mercator' or 'globe'
   
   // Refs
   const mapRef = useRef(null);
@@ -86,6 +87,38 @@ function SFEOSMap() {
     console.log('Map center:', map.getCenter(), 'Zoom:', map.getZoom());
     setIsMapLoaded(true);
   }, []);
+
+  // Update projection when it changes
+  useEffect(() => {
+    if (!isMapLoaded) return;
+    
+    try {
+      const map = mapRef.current?.getMap();
+      if (!map) return;
+      
+      // Set projection after style loads
+      const setProjectionAfterStyleLoad = () => {
+        try {
+          map.setProjection({
+            type: projection,
+          });
+          console.log('Projection set to:', projection);
+        } catch (err) {
+          console.warn('Error setting projection:', err);
+        }
+      };
+      
+      // If style is already loaded, set projection immediately
+      if (map.isStyleLoaded()) {
+        setProjectionAfterStyleLoad();
+      } else {
+        // Otherwise wait for style.load event
+        map.once('style.load', setProjectionAfterStyleLoad);
+      }
+    } catch (err) {
+      console.warn('Error in projection effect:', err);
+    }
+  }, [projection, isMapLoaded]);
 
   // Helpers for bbox drawing layer
   const addOrUpdateBboxLayer = useCallback((map, bbox) => {
@@ -1063,8 +1096,6 @@ function SFEOSMap() {
               const features = Array.isArray(data.features) ? data.features : [];
               console.log('%c📊 ALL COLLECTIONS SEARCH RESULTS (onMouseUp):', 'color: purple; font-weight: bold;');
               console.log('Features returned:', features.length);
-              console.log('numberReturned:', data.numberReturned);
-              console.log('numberMatched:', data.numberMatched);
               window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
               window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
               
@@ -1139,6 +1170,16 @@ function SFEOSMap() {
         )}
       </div>
       <div className="map-controls">
+        <div className="control-section">
+          <div className="control-label">Globe</div>
+          <button 
+            className="fullscreen-btn"
+            onClick={() => setProjection(projection === 'mercator' ? 'globe' : 'mercator')}
+            title={projection === 'globe' ? "Switch to flat map" : "Switch to globe"}
+          >
+            {projection === 'globe' ? '🌍' : '🗺️'}
+          </button>
+        </div>
         <div className="control-section">
           <div className="control-label">View</div>
           <button 
