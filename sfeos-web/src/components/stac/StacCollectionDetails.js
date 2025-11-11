@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './StacCollectionDetails.css';
 import './QueryItems.css';
 import LoadingIndicator from '../common/LoadingIndicator';
@@ -28,6 +28,82 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   const itemLimitRef = useRef(itemLimit);
   const appliedDatetimeFilterRef = useRef('');
 
+  // Helper function to extract thumbnail from item
+  const extractThumbnail = (item) => {
+    let thumbnailUrl = null;
+    let thumbnailType = null;
+    try {
+      const assets = item.assets || {};
+      const assetsArr = Object.values(assets);
+      
+      // Step 1: Check for assets.thumbnail
+      if (assets.thumbnail && assets.thumbnail.href) {
+        thumbnailUrl = assets.thumbnail.href;
+        thumbnailType = assets.thumbnail.type || null;
+      }
+      
+      // Step 2: Search for asset with role 'thumbnail' and image type
+      if (!thumbnailUrl) {
+        const thumbAssetWeb = assetsArr.find(a => {
+          const roles = Array.isArray(a.roles) ? a.roles : [];
+          const type = (a.type || '').toLowerCase();
+          return roles.includes('thumbnail') && (type.startsWith('image/jpeg') || type.startsWith('image/png'));
+        });
+        if (thumbAssetWeb) {
+          thumbnailUrl = thumbAssetWeb.href;
+          thumbnailType = thumbAssetWeb.type || null;
+        }
+      }
+      
+      // Step 3: Search for any asset with role 'thumbnail'
+      if (!thumbnailUrl) {
+        const thumbAny = assetsArr.find(a => {
+          const roles = Array.isArray(a.roles) ? a.roles : [];
+          return roles.includes('thumbnail') && a.href;
+        });
+        if (thumbAny) {
+          thumbnailUrl = thumbAny.href;
+          thumbnailType = thumbAny.type || null;
+        }
+      }
+      
+      // Step 4: Check links for thumbnail
+      if (!thumbnailUrl && Array.isArray(item.links)) {
+        const link = item.links.find(l => l.rel === 'thumbnail' || l.rel === 'preview');
+        if (link && link.href) {
+          thumbnailUrl = link.href;
+          thumbnailType = link.type || null;
+        }
+      }
+    } catch (e) {
+      console.warn('Error extracting thumbnail:', e);
+    }
+    return { thumbnailUrl, thumbnailType };
+  };
+
+  // Helper function to process items from API response
+  const processItems = useCallback((features) => {
+    console.log('Processing', features.length, 'features');
+    console.log('First feature properties:', features[0]?.properties);
+    return features.map(item => {
+      const { thumbnailUrl, thumbnailType } = extractThumbnail(item);
+      console.log(`Processed item ${item.id} with properties:`, item.properties);
+      return {
+        id: item.id,
+        title: item.properties?.title || item.id,
+        geometry: item.geometry || null,
+        bbox: item.bbox || null,
+        thumbnailUrl,
+        thumbnailType,
+        datetime: item.properties?.datetime || item.properties?.start_datetime || null,
+        assetsCount: Object.keys(item.assets || {}).length,
+        assets: item.assets || {},
+        collection: item.collection || null,
+        properties: item.properties || {}
+      };
+    });
+  }, []);
+
   useEffect(() => {
     stacApiUrlRef.current = stacApiUrl;
   }, [stacApiUrl]);
@@ -40,8 +116,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   useEffect(() => {
     appliedDatetimeFilterRef.current = appliedDatetimeFilter;
   }, [appliedDatetimeFilter]);
-
-
 
   // Detect collection changes and reset state
   useEffect(() => {
@@ -75,7 +149,10 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           const response = await fetch(url);
           if (response.ok) {
             const data = await response.json();
-            console.log('Received items data:', data);
+            console.log('🔍 RAW API RESPONSE:', data);
+            console.log('🔍 First feature full:', data.features?.[0]);
+            console.log('🔍 First feature properties:', data.features?.[0]?.properties);
+            console.log('🔍 Properties keys count:', Object.keys(data.features?.[0]?.properties || {}).length);
             
             // Capture search result counts
             const nr = data?.numberReturned;
@@ -88,10 +165,15 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             } catch {}
             
             if (data.features && data.features.length > 0) {
+              console.log('Processing features with properties:', data.features.map(f => ({id: f.id, hasProps: !!f.properties, propKeys: Object.keys(f.properties || {})})));
               const items = processItems(data.features);
               
-              console.log('Setting query items:', items);
+              console.log('Processed items:', items);
+              console.log('First item properties:', items[0]?.properties);
               setQueryItems(items);
+              
+              // Also update the map with the new items for individual collections
+              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items } }));
             } else {
               console.log('No features found in the response');
               setQueryItems([]);
@@ -168,7 +250,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     } else {
       console.log('No collection available to fetch items');
     }
-  }, [collection]);
+  }, [collection, processItems]);
 
   const handleLoadNext = async (e) => {
     try {
@@ -295,7 +377,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     };
     window.addEventListener('refetchQueryItems', handler);
     return () => window.removeEventListener('refetchQueryItems', handler);
-  }, [collection]);
+  }, [collection, processItems]);
 
   // Listen for runSearch event to show loading indicator
   useEffect(() => {
@@ -331,11 +413,13 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         setNumberMatched(numberMatched);
       }
       
-      // Update query items list when bbox search returns results
+      // Update query items list when items are received
       if (Array.isArray(items)) {
-        const processedItems = processItems(items);
+        // Always use the items as-is since they should already be processed
+        const processedItems = items;
         setQueryItems(processedItems);
         console.log('Query items updated from showItemsOnMap event:', processedItems.length, 'items');
+        console.log('First item properties:', processedItems[0]?.properties);
       }
       
       // Always hide loading indicator when we get results
@@ -395,18 +479,18 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
       console.log('Reconstructing GeoJSON from', queryItems.length, 'processed items');
 
-      // Reconstruct GeoJSON FeatureCollection from processed items
+      // Include complete STAC item data without filtering
       const features = queryItems.map(item => ({
         type: 'Feature',
         id: item.id,
         geometry: item.geometry,
         bbox: item.bbox,
-        properties: {
-          datetime: item.datetime,
-          title: item.title
-        },
+        properties: item.properties || {},
         assets: item.assets || {},
-        links: item.links || []
+        links: item.links || [],
+        collection: item.collection,
+        stac_version: item.stac_version,
+        stac_extensions: item.stac_extensions
       }));
 
       const geojsonData = {
@@ -454,71 +538,26 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return url;
   };
 
-  // Helper function to process items from API response
-  const processItems = (features) => {
-    return features.map(item => {
-      let thumbnailUrl = null;
-      let thumbnailType = null;
-      try {
-        const assets = item.assets || {};
-        const assetsArr = Object.values(assets);
-        
-        // Step 1: Check for assets.thumbnail
-        if (assets.thumbnail && assets.thumbnail.href) {
-          thumbnailUrl = assets.thumbnail.href;
-          thumbnailType = assets.thumbnail.type || null;
-        }
-        
-        // Step 2: Search for asset with role 'thumbnail' and image type
-        if (!thumbnailUrl) {
-          const thumbAssetWeb = assetsArr.find(a => {
-            const roles = Array.isArray(a.roles) ? a.roles : [];
-            const type = (a.type || '').toLowerCase();
-            return roles.includes('thumbnail') && (type.startsWith('image/jpeg') || type.startsWith('image/png'));
-          });
-          if (thumbAssetWeb) {
-            thumbnailUrl = thumbAssetWeb.href;
-            thumbnailType = thumbAssetWeb.type || null;
-          }
-        }
-        
-        // Step 3: Search for any asset with role 'thumbnail'
-        if (!thumbnailUrl) {
-          const thumbAny = assetsArr.find(a => {
-            const roles = Array.isArray(a.roles) ? a.roles : [];
-            return roles.includes('thumbnail') && a.href;
-          });
-          if (thumbAny) {
-            thumbnailUrl = thumbAny.href;
-            thumbnailType = thumbAny.type || null;
-          }
-        }
-        
-        // Step 4: Check links for thumbnail
-        if (!thumbnailUrl && Array.isArray(item.links)) {
-          const link = item.links.find(l => l.rel === 'thumbnail' || l.rel === 'preview');
-          if (link && link.href) {
-            thumbnailUrl = link.href;
-            thumbnailType = link.type || null;
-          }
-        }
-      } catch (e) {
-        console.warn('Error extracting thumbnail:', e);
-      }
-      console.log(`Processed item ${item.id} with thumbnail ${thumbnailUrl}`);
-      return {
-        id: item.id,
-        title: item.properties?.title || item.id,
-        geometry: item.geometry || null,
-        bbox: item.bbox || null,
-        thumbnailUrl,
-        thumbnailType,
-        datetime: item.properties?.datetime || item.properties?.start_datetime || null,
-        assetsCount: Object.keys(item.assets || {}).length,
-        assets: item.assets || {},
-        collection: item.collection || null // Extract collection information
-      };
-    });
+  // Helper function to format datetime for STAC API
+  const formatDatetime = (dt) => {
+    if (!dt) return null;
+    // datetime-local format: "2025-01-15T10:30" -> ISO 8601: "2025-01-15T10:30:00Z"
+    return dt.includes('T') ? `${dt}:00Z` : `${dt}T00:00:00Z`;
+  };
+
+  // Helper function to build datetime filter string
+  const buildDatetimeFilter = (startDate, endDate) => {
+    const formattedStart = formatDatetime(startDate);
+    const formattedEnd = formatDatetime(endDate);
+    
+    if (formattedStart && formattedEnd) {
+      return `${formattedStart}/${formattedEnd}`;
+    } else if (formattedStart) {
+      return `${formattedStart}/2200-12-31T23:59:59Z`;
+    } else if (formattedEnd) {
+      return `1800-01-01T00:00:00Z/${formattedEnd}`;
+    }
+    return '';
   };
 
   // Handler for All Collections mode query items expand/collapse
@@ -763,7 +802,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                               datetime: item.datetime || null,
                               assetsCount: item.assetsCount || 0,
                               bbox: item.bbox || null,
-                              collection: item.collection || null
+                              collection: item.collection || null,
+                              properties: item.properties || {}
                             }
                           });
                           window.dispatchEvent(detailsEvent);
@@ -817,37 +857,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   className="datetime-apply-btn"
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Build datetime filter string in STAC format: start/end
-                    // Convert datetime-local format to ISO 8601 with Z suffix
-                    const formatDatetime = (dt) => {
-                      if (!dt) return null;
-                      // datetime-local format: "2025-01-15T10:30" -> ISO 8601: "2025-01-15T10:30:00Z"
-                      return dt.includes('T') ? `${dt}:00Z` : `${dt}T00:00:00Z`;
-                    };
-                    
-                    let datetimeFilter = '';
-                    const formattedStart = formatDatetime(startDate);
-                    const formattedEnd = formatDatetime(endDate);
-                    
-                    if (formattedStart && formattedEnd) {
-                      datetimeFilter = `${formattedStart}/${formattedEnd}`;
-                    } else if (formattedStart) {
-                      // Open-ended range: from start date to year 2200
-                      datetimeFilter = `${formattedStart}/2200-12-31T23:59:59Z`;
-                    } else if (formattedEnd) {
-                      // Open-ended range: from year 1800 to end date
-                      datetimeFilter = `1800-01-01T00:00:00Z/${formattedEnd}`;
-                    } else {
-                      // If neither start nor end date is selected, don't apply any filter
-                      datetimeFilter = '';
-                    }
-                    
-                    console.log('Datetime filter applied:', { startDate, endDate, formattedStart, formattedEnd, datetimeFilter });
+                    const datetimeFilter = buildDatetimeFilter(startDate, endDate);
+                    console.log('Datetime filter applied:', { startDate, endDate, datetimeFilter });
                     setAppliedDatetimeFilter(datetimeFilter);
                     setIsDatetimePickerOpen(false);
-                    // Dispatch event so SFEOSMap can use the datetime filter in bbox searches
                     window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter } }));
-                    // Trigger refetch with the new datetime filter
                     window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
                   }}
                 >
@@ -1033,7 +1047,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     }
   };
 
-  const handleItemClick = (item) => {
+  function handleItemClick(item) {
     console.log('Item clicked:', item);
     // Close any open overlays when selecting an item
     try {
@@ -1066,7 +1080,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       console.log('Zooming to item bbox:', item.bbox);
       window.dispatchEvent(zoomEvent);
     }
-  };
+  }
 
   const handleEyeButtonClick = (e, item) => {
     e.stopPropagation();
@@ -1087,38 +1101,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     } else {
       // Show thumbnail
       setVisibleThumbnailItemId(item.id);
-      
-      // Extract thumbnail URL - try multiple sources
-      let thumbnailUrl = null;
-      let thumbnailType = null;
-      
-      // Try 1: Check assets.thumbnail
-      if (item.assets && item.assets.thumbnail && item.assets.thumbnail.href) {
-        thumbnailUrl = item.assets.thumbnail.href;
-        thumbnailType = item.assets.thumbnail.type;
-      }
-      
-      // Try 2: Search for any asset with role 'thumbnail'
-      if (!thumbnailUrl && item.assets) {
-        const thumbAsset = Object.values(item.assets).find(a => 
-          Array.isArray(a.roles) && a.roles.includes('thumbnail') && a.href
-        );
-        if (thumbAsset) {
-          thumbnailUrl = thumbAsset.href;
-          thumbnailType = thumbAsset.type;
-        }
-      }
-      
-      // Try 3: Check links for thumbnail
-      if (!thumbnailUrl && item.links) {
-        const thumbLink = item.links.find(l => 
-          (l.rel === 'thumbnail' || l.rel === 'preview') && l.href
-        );
-        if (thumbLink) {
-          thumbnailUrl = thumbLink.href;
-          thumbnailType = thumbLink.type;
-        }
-      }
+      const { thumbnailUrl, thumbnailType } = extractThumbnail(item);
       
       // Clear the item geometries from the map to hide the red square
       window.dispatchEvent(new CustomEvent('clearItemGeometries'));
@@ -1405,7 +1388,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                             datetime: item.datetime || null,
                             assetsCount: item.assetsCount || 0,
                             bbox: item.bbox || null,
-                            collection: item.collection || collection?.id || null
+                            collection: item.collection || collection?.id || null,
+                            properties: item.properties || {}
                           }
                         });
                         window.dispatchEvent(detailsEvent);
@@ -1459,37 +1443,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 className="datetime-apply-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Build datetime filter string in STAC format: start/end
-                  // Convert datetime-local format to ISO 8601 with Z suffix
-                  const formatDatetime = (dt) => {
-                    if (!dt) return null;
-                    // datetime-local format: "2025-01-15T10:30" -> ISO 8601: "2025-01-15T10:30:00Z"
-                    return dt.includes('T') ? `${dt}:00Z` : `${dt}T00:00:00Z`;
-                  };
-                  
-                  let datetimeFilter = '';
-                  const formattedStart = formatDatetime(startDate);
-                  const formattedEnd = formatDatetime(endDate);
-                  
-                  if (formattedStart && formattedEnd) {
-                    datetimeFilter = `${formattedStart}/${formattedEnd}`;
-                  } else if (formattedStart) {
-                    // Open-ended range: from start date to year 2200
-                    datetimeFilter = `${formattedStart}/2200-12-31T23:59:59Z`;
-                  } else if (formattedEnd) {
-                    // Open-ended range: from year 1800 to end date
-                    datetimeFilter = `1800-01-01T00:00:00Z/${formattedEnd}`;
-                  } else {
-                    // If neither start nor end date is selected, don't apply any filter
-                    datetimeFilter = '';
-                  }
-                  
-                  console.log('Datetime filter applied:', { startDate, endDate, formattedStart, formattedEnd, datetimeFilter });
+                  const datetimeFilter = buildDatetimeFilter(startDate, endDate);
+                  console.log('Datetime filter applied:', { startDate, endDate, datetimeFilter });
                   setAppliedDatetimeFilter(datetimeFilter);
                   setIsDatetimePickerOpen(false);
-                  // Dispatch event so SFEOSMap can use the datetime filter in bbox searches
                   window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter } }));
-                  // Trigger refetch with the new datetime filter
                   window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
                 }}
               >
