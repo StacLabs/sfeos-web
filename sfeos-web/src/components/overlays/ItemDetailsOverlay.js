@@ -1,9 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './ItemDetailsOverlay.css';
 
 function ItemDetailsOverlay({ details, onClose }) {
+  const [showProperties, setShowProperties] = useState(false);
   if (!details) return null;
-  const { id, title, datetime, assetsCount, bbox, collection } = details;
+  const { id, title, assetsCount, bbox, collection, properties = {} } = details;
+  
+  console.log('ItemDetailsOverlay received details:', details);
+  console.log('Properties object:', properties);
+  console.log('Properties keys:', Object.keys(properties));
+  console.log('Properties length:', Object.keys(properties).length);
+  console.log('Properties sample:', Object.keys(properties).slice(0, 5));
+  console.log('Full properties:', JSON.stringify(properties, null, 2));
 
   return (
     <div className="item-details-overlay" role="dialog" aria-label="STAC item details">
@@ -17,12 +25,51 @@ function ItemDetailsOverlay({ details, onClose }) {
           {collection && (
             <div className="details-row"><span className="label">Collection:</span><span className="value" title={collection}>{collection}</span></div>
           )}
-          {datetime && (
-            <div className="details-row"><span className="label">Datetime:</span><span className="value">{new Date(datetime).toISOString()}</span></div>
+          {properties.datetime && (
+            <div className="details-row"><span className="label">Datetime:</span><span className="value">{new Date(properties.datetime).toISOString()}</span></div>
+          )}
+          {properties.start_datetime && (
+            <div className="details-row"><span className="label">Start:</span><span className="value">{new Date(properties.start_datetime).toISOString()}</span></div>
+          )}
+          {properties.end_datetime && (
+            <div className="details-row"><span className="label">End:</span><span className="value">{new Date(properties.end_datetime).toISOString()}</span></div>
           )}
           <div className="details-row"><span className="label">Assets:</span><span className="value">{assetsCount ?? 0}</span></div>
           {Array.isArray(bbox) && bbox.length === 4 && (
             <div className="details-row bbox"><span className="label">BBox:</span><span className="value">[{bbox.map(n => Number(n).toFixed(4)).join(', ')}]</span></div>
+          )}
+          
+          <div className="details-row">
+            <span className="label">Properties:</span>
+            <span className="value">
+              <button 
+                className="properties-toggle" 
+                onClick={() => setShowProperties(!showProperties)}
+              >
+                {showProperties ? 'Hide' : 'Show'} Properties ({Object.keys(properties).length})
+              </button>
+            </span>
+          </div>
+          
+          {showProperties && Object.keys(properties).length > 0 && (
+            <div className="properties-expanded">
+              {Object.entries(properties).map(([key, value]) => (
+                <div key={key} className="property-row">
+                  <span className="property-key">
+                    {key}:
+                  </span>
+                  <span className="property-value">
+                    {typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+                      ? String(value) 
+                      : Array.isArray(value)
+                        ? `[${value.join(', ')}]`
+                        : typeof value === 'object' && value !== null
+                          ? JSON.stringify(value, null, 1).replace(/[{}"]/g, '').replace(/,/g, ', ')
+                          : String(value)}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>

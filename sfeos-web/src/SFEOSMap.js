@@ -325,7 +325,9 @@ function SFEOSMap() {
               title: itemData.title || itemData.id,
               datetime: itemData.datetime || null,
               assetsCount: itemData.assetsCount || 0,
-              bbox: itemData.bbox || null
+              bbox: itemData.bbox || null,
+              collection: itemData.collection || null,
+              properties: itemData.properties || {}
             }
           }));
           
@@ -450,12 +452,22 @@ function SFEOSMap() {
   // Switch the active STAC API and reset state
   const handleSwitchApi = useCallback((newUrl) => {
     try {
-      const trimmed = (newUrl || '').trim();
+      let trimmed = (newUrl || '').trim();
       if (!trimmed) return;
+      
+      // Remove trailing slash if present for consistency
+      trimmed = trimmed.replace(/\/+$/, '');
+      
       stacApiUrlRef.current = trimmed;
       setStacApiUrl(trimmed);
       resetToInitialState();
       setShowPublicLinks(false);
+      
+      // Update URL in the browser's address bar
+      const url = new URL(window.location);
+      url.searchParams.set('stacApiUrl', trimmed);
+      window.history.pushState({}, '', url);
+      
     } catch (e) {
       console.warn('Failed to switch API URL:', e);
     }
@@ -891,7 +903,20 @@ function SFEOSMap() {
           console.log('Features returned:', features.length);
           console.log('numberReturned:', data.numberReturned);
           console.log('numberMatched:', data.numberMatched);
-          window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+          
+          // Process features to include properties and other metadata
+          const processedFeatures = features.map(item => ({
+            id: item.id,
+            title: item.properties?.title || item.id,
+            geometry: item.geometry || null,
+            bbox: item.bbox || null,
+            collection: item.collection || null,
+            properties: item.properties || {},
+            assetsCount: Object.keys(item.assets || {}).length,
+            datetime: item.properties?.datetime || item.properties?.start_datetime || null
+          }));
+          
+          window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
           window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
         } else if (bbox && bbox.length === 4 && selectedCollectionId === null) {
           // All Collections bbox search
@@ -918,7 +943,20 @@ function SFEOSMap() {
           console.log('Features returned:', features.length);
           console.log('numberReturned:', data.numberReturned);
           console.log('numberMatched:', data.numberMatched);
-          window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+          
+          // Process features to include properties and other metadata
+          const processedFeatures = features.map(item => ({
+            id: item.id,
+            title: item.properties?.title || item.id,
+            geometry: item.geometry || null,
+            bbox: item.bbox || null,
+            collection: item.collection || null,
+            properties: item.properties || {},
+            assetsCount: Object.keys(item.assets || {}).length,
+            datetime: item.properties?.datetime || item.properties?.start_datetime || null
+          }));
+          
+          window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
           window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
         } else {
           // No bbox drawn, trigger re-fetch of query items with current limit
@@ -1062,7 +1100,20 @@ function SFEOSMap() {
               if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
               const data = await resp.json();
               const features = Array.isArray(data.features) ? data.features : [];
-              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: features, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+              
+              // Process features to include properties and other metadata
+              const processedFeatures = features.map(item => ({
+                id: item.id,
+                title: item.properties?.title || item.id,
+                geometry: item.geometry || null,
+                bbox: item.bbox || null,
+                collection: item.collection || null,
+                properties: item.properties || {},
+                assetsCount: Object.keys(item.assets || {}).length,
+                datetime: item.properties?.datetime || item.properties?.start_datetime || null
+              }));
+              
+              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
               window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
               
               // Dispatch bbox search nextLink to update pagination
@@ -1272,6 +1323,24 @@ function SFEOSMap() {
                   <span className="public-link-text">https://stac.dataspace.copernicus.eu/v1</span>
                 </button>
               </li>
+              <li>
+                <button type="button" className="public-link-button" onClick={() => handleSwitchApi('https://stac.terrascope.be')} title="Use Terrascope STAC API">
+                  <span className="public-link-icon">🌍</span>
+                  <span className="public-link-text">https://stac.terrascope.be</span>
+                </button>
+              </li>
+              <li>
+                <button type="button" className="public-link-button" onClick={() => handleSwitchApi('https://explorer.digitalearth.africa/stac')} title="Use Digital Earth Africa STAC API">
+                  <span className="public-link-icon">🌍</span>
+                  <span className="public-link-text">https://explorer.digitalearth.africa/stac</span>
+                </button>
+              </li>
+              <li>
+                <button type="button" className="public-link-button" onClick={() => handleSwitchApi('https://earth-search.aws.element84.com/v1')} title="Use Earth Search by Element 84 STAC API">
+                  <span className="public-link-icon">☁️</span>
+                  <span className="public-link-text">https://earth-search.aws.element84.com/v1</span>
+                </button>
+              </li>
             </ul>
           </div>
         </div>
@@ -1280,12 +1349,20 @@ function SFEOSMap() {
         key={stacApiUrl}
         initialUrl={stacApiUrl}
         onUpdate={(newUrl) => {
-          const trimmed = (newUrl || '').trim();
+          let trimmed = (newUrl || '').trim();
           if (!trimmed) {
             console.warn('Empty URL provided');
             return;
           }
-
+          
+          // Remove trailing slash if present for consistency
+          trimmed = trimmed.replace(/\/+$/, '');
+          
+          // Update URL in the browser's address bar
+          const url = new URL(window.location);
+          url.searchParams.set('stacApiUrl', trimmed);
+          window.history.pushState({}, '', url);
+          
           stacApiUrlRef.current = trimmed;
           setStacApiUrl(trimmed);
           resetToInitialState();
