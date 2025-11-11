@@ -140,27 +140,30 @@
   white-space: nowrap;
 }
 
-.bbox-label {
-  font-size: 0.6rem;
-  font-weight: 600;
-  color: #333;
-  margin-left: 6px;
-}
-
-.bbox-btn {
+.bbox-btn,
+.datetime-btn {
   border: 1px solid rgba(0,0,0,0.2);
   background: rgba(255,255,255,0.6);
   color: #000;
   border-radius: 6px;
-  padding: 3px 8px; /* match datetime button padding */
-  font-size: 0.52rem; /* tiny bit smaller */
-  line-height: 1.1;
-  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.bbox-btn:hover {
+.bbox-btn {
+  padding: 3px 8px;
+  font-size: 0.52rem;
+  line-height: 1.1;
+  font-weight: 600;
+}
+
+.datetime-btn {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+}
+
+.bbox-btn:hover,
+.datetime-btn:hover {
   background: rgba(0,0,0,0.08);
 }
 
@@ -201,28 +204,9 @@
   box-shadow: 0 0 4px rgba(74, 144, 226, 0.3);
 }
 
-.datetime-btn {
-  border: 1px solid rgba(0,0,0,0.2);
-  background: rgba(255,255,255,0.6);
-  color: #000;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.datetime-btn:hover {
-  background: rgba(0,0,0,0.08);
-}
-
 .datetime-btn.datetime-inactive {
   background: rgba(255, 255, 255, 0.6);
   border-color: rgba(0, 0, 0, 0.2);
-}
-
-.datetime-btn.datetime-inactive:hover {
-  background: rgba(0, 0, 0, 0.08);
 }
 
 .datetime-btn.datetime-active {
@@ -362,21 +346,7 @@
   background: rgba(244, 67, 54, 0.2);
 }
 
-.download-btn {
-  border: 1px solid rgba(0,0,0,0.2);
-  background: rgba(255,255,255,0.6);
-  color: #000;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.download-btn:hover {
-  background: rgba(0,0,0,0.08);
-}
-
+.download-btn,
 .search-btn {
   border: 1px solid rgba(0,0,0,0.2);
   background: rgba(255,255,255,0.6);
@@ -388,6 +358,7 @@
   transition: all 0.2s ease;
 }
 
+.download-btn:hover,
 .search-btn:hover {
   background: rgba(0,0,0,0.08);
 }
