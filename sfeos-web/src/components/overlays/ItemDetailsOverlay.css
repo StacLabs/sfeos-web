@@ -92,6 +92,7 @@
 .property-key {
   font-weight: bold;
   margin-right: 8px;
+  color: #666;
 }
 
 .property-value {
@@ -101,9 +102,10 @@
 
 .properties-toggle {
   background: none;
-  border: 1px solid #ccc;
+  border: 2px solid #ccc;
   border-radius: 3px;
   padding: 2px 6px;
-  font-size: 0.7rem;
+  font-size: 0.6rem;
   cursor: pointer;
+  color: #555;
 }

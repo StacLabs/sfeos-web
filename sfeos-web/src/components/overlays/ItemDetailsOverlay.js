@@ -45,14 +45,6 @@ function ItemDetailsOverlay({ details, onClose }) {
               <button 
                 className="properties-toggle" 
                 onClick={() => setShowProperties(!showProperties)}
-                style={{
-                  background: 'none',
-                  border: '1px solid #ccc',
-                  borderRadius: '3px',
-                  padding: '2px 6px',
-                  fontSize: '0.7rem',
-                  cursor: 'pointer'
-                }}
               >
                 {showProperties ? 'Hide' : 'Show'} Properties ({Object.keys(properties).length})
               </button>
@@ -60,26 +52,13 @@ function ItemDetailsOverlay({ details, onClose }) {
           </div>
           
           {showProperties && Object.keys(properties).length > 0 && (
-            <div className="properties-expanded" style={{
-              marginTop: '8px',
-              padding: '8px',
-              background: 'rgba(0, 0, 0, 0.05)',
-              borderRadius: '4px',
-              fontSize: '0.6rem',
-              maxHeight: '200px',
-              overflowY: 'auto'
-            }}>
+            <div className="properties-expanded">
               {Object.entries(properties).map(([key, value]) => (
-                <div key={key} className="property-row" style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  marginBottom: '2px',
-                  wordBreak: 'break-word'
-                }}>
-                  <span className="property-key" style={{ fontWeight: 'bold', marginRight: '8px' }}>
+                <div key={key} className="property-row">
+                  <span className="property-key">
                     {key}:
                   </span>
-                  <span className="property-value" style={{ textAlign: 'right', flex: 1 }}>
+                  <span className="property-value">
                     {typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
                       ? String(value) 
                       : Array.isArray(value)
