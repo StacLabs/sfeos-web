@@ -1071,7 +1071,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   return (
     <>
       {isLoadingItems && <LoadingIndicator message="Loading items..." />}
-      <style jsx global>{`
+      <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
         }

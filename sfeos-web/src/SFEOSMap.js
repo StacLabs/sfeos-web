@@ -41,7 +41,7 @@ function SFEOSMap() {
   const [viewState, setViewState] = useState({
     longitude: 28.9784,
     latitude: 41.0151,
-    zoom: 6
+    zoom: 3
   });
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -103,11 +103,6 @@ function SFEOSMap() {
             type: projection,
           });
           console.log('Projection set to:', projection);
-          
-          // For globe view, set zoom to make it appear larger
-          if (projection === 'globe') {
-            map.setZoom(12);
-          }
         } catch (err) {
           console.warn('Error setting projection:', err);
         }
