@@ -260,8 +260,7 @@ function SFEOSMap() {
       console.warn('Invalid geometry in addGeometry:', geometry);
       return;
     }
-    
-    console.log(`Adding geometry ${id}:`, geometry);
+
     
     // Create a GeoJSON feature for the geometry
     const geometryFeature = {
@@ -578,7 +577,7 @@ function SFEOSMap() {
       const lonDiff = maxLon - minLon;
       const latDiff = maxLat - minLat;
       const maxDiff = Math.max(lonDiff, latDiff, 0.001); // Ensure we don't get Infinity
-      let zoom = Math.max(0, Math.min(13, 13 - Math.log2(maxDiff / 0.12))); // Balanced: 13 max, 0.12 divisor
+      let zoom = Math.max(0, Math.min(13, 13 - Math.log2(maxDiff / 0.08))); // Reduced divisor from 0.12 to 0.08 for higher zoom
       
       // For globe projection, apply zoom adjustment to keep globe size consistent
       if (projection === 'globe') {
@@ -586,21 +585,45 @@ function SFEOSMap() {
         const targetLat = centerLat;
         // Calculate zoom adjustment: log2(cos(targetLat) / cos(currentLat))
         const zoomAdjustment = Math.log2(Math.cos(targetLat / 180 * Math.PI) / Math.cos(currentLat / 180 * Math.PI));
-        zoom = Math.max(1.5, zoom + zoomAdjustment); // Balanced min zoom
+        zoom = Math.max(2.8, Math.min(13, zoom + zoomAdjustment)); // Clamp between 2.8 and 13 for globe
         console.log('🌍 Globe zoom adjustment:', { currentLat, targetLat, zoomAdjustment, adjustedZoom: zoom });
       }
       
       console.log('🎯 Flying to:', { centerLon, centerLat, zoom, projection });
       
-      // Use flyTo for smooth animation - don't set viewState manually as it conflicts
-      map.flyTo({
-        center: [centerLon, centerLat],
-        zoom: zoom,
-        bearing: 0, // Reset bearing to face north
-        pitch: 0,   // Reset pitch to top-down view
-        duration: 1000,
-        essential: true
-      });
+      // Ensure map is ready before flying
+      if (!map.isStyleLoaded()) {
+        console.log('Map style not loaded yet, waiting...');
+        map.once('styledata', () => {
+          performFlyTo();
+        });
+      } else {
+        performFlyTo();
+      }
+      
+      function performFlyTo() {
+        // Use flyTo for smooth animation - don't set viewState manually as it conflicts
+        try {
+          map.flyTo({
+            center: [centerLon, centerLat],
+            zoom: zoom,
+            bearing: 0, // Reset bearing to face north
+            pitch: 0,   // Reset pitch to top-down view
+            duration: 1000,
+            essential: true,
+            minZoom: 2.8  // Prevent globe from shrinking too much
+          });
+        } catch (error) {
+          console.error('Error in flyTo, using jumpTo fallback:', error);
+          // Fallback to jumpTo if flyTo fails
+          map.jumpTo({
+            center: [centerLon, centerLat],
+            zoom: zoom,
+            bearing: 0,
+            pitch: 0
+          });
+        }
+      }
       
       // Update view state after flyTo completes (flyTo will trigger onMove)
       setTimeout(() => {
@@ -731,6 +754,7 @@ function SFEOSMap() {
           map.fitBounds(bounds, {
             padding: padding,
             maxZoom: adjustedMaxZoom,
+            minZoom: 2.8,  // Prevent globe from shrinking too much
             duration: 1000
           });
           
