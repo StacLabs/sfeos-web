@@ -555,20 +555,21 @@ function SFEOSMap() {
       });
       
       console.log('Combined bbox:', combinedBbox);
-      console.log('All coordinates count:', allCoords.length);
       
-      // Calculate center as average of all coordinates (more accurate for globe)
-      let centerLon = combinedBbox[0];
-      let centerLat = combinedBbox[1];
+      // Always use coordinate average for centering - more reliable than bbox center
+      let centerLon = (combinedBbox[0] + combinedBbox[2]) / 2;
+      let centerLat = (combinedBbox[1] + combinedBbox[3]) / 2;
       
       if (allCoords.length > 0) {
-        const avgLon = allCoords.reduce((sum, [lon]) => sum + lon, 0) / allCoords.length;
-        const avgLat = allCoords.reduce((sum, [, lat]) => sum + lat, 0) / allCoords.length;
-        centerLon = avgLon;
-        centerLat = avgLat;
-        console.log('✅ Center from average:', { centerLon, centerLat });
-        console.log('📍 Bbox corners:', { minLon: combinedBbox[0], minLat: combinedBbox[1], maxLon: combinedBbox[2], maxLat: combinedBbox[3] });
+        // Use coordinate average for better centering
+        centerLon = allCoords.reduce((sum, [lon]) => sum + lon, 0) / allCoords.length;
+        centerLat = allCoords.reduce((sum, [, lat]) => sum + lat, 0) / allCoords.length;
+        console.log('✅ Using coordinate average for center');
       }
+      
+      console.log('✅ Center:', { centerLon, centerLat });
+      console.log('📍 Bbox corners:', { minLon: combinedBbox[0], minLat: combinedBbox[1], maxLon: combinedBbox[2], maxLat: combinedBbox[3] });
+      console.log('📊 Item count:', validGeometries.length, 'Coordinate count:', allCoords.length);
       
       // Zoom to the combined bounds
       const [minLon, minLat, maxLon, maxLat] = combinedBbox;
@@ -604,6 +605,11 @@ function SFEOSMap() {
       function performFlyTo() {
         // Use flyTo for smooth animation - don't set viewState manually as it conflicts
         try {
+          // Stop any ongoing animation first
+          if (map.isEasing && map.isEasing()) {
+            map.stop();
+          }
+          
           map.flyTo({
             center: [centerLon, centerLat],
             zoom: zoom,
@@ -748,6 +754,11 @@ function SFEOSMap() {
             const zoomAdjustment = Math.log2(Math.cos(targetLat / 180 * Math.PI) / Math.cos(currentLat / 180 * Math.PI));
             adjustedMaxZoom = Math.max(1, maxZoom + zoomAdjustment);
             console.log('Globe zoom adjustment:', zoomAdjustment, 'currentLat:', currentLat, 'targetLat:', targetLat, 'adjusted maxZoom:', adjustedMaxZoom);
+          }
+          
+          // Stop any ongoing animation first
+          if (map.isEasing && map.isEasing()) {
+            map.stop();
           }
           
           // Fit bounds with padding and max zoom
