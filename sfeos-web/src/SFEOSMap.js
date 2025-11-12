@@ -62,6 +62,7 @@ function SFEOSMap() {
   const searchControllerRef = useRef(null); // AbortController for in-flight searches
   const latestSearchIdRef = useRef(0); // Monotonic ID to ignore stale results
   const isAnimatingRef = useRef(false); // Prevent overlapping map animations
+  const pendingRafRef = useRef(null); // Track scheduled requestAnimationFrame
 
   useEffect(() => {
     stacApiUrlRef.current = stacApiUrl;
@@ -101,37 +102,83 @@ function SFEOSMap() {
     setIsMapLoaded(true);
   }, []);
 
-  // Update projection when it changes
+  // Update projection when it changes (defer until map is idle to avoid animation conflicts)
   useEffect(() => {
     if (!isMapLoaded) return;
     
     try {
       const map = mapRef.current?.getMap();
       if (!map) return;
-      
-      // Set projection after style loads
-      const setProjectionAfterStyleLoad = () => {
+
+      const applyProjection = () => {
         try {
-          map.setProjection({
-            type: projection,
-          });
+          // Re-enable globe projection with safer approach
+          if (projection === 'globe') {
+            // For globe, set projection and ensure map is stable first
+            map.setProjection({ type: 'globe' });
+            // Add a small delay to let projection settle before any camera operations
+            setTimeout(() => {
+              try {
+                map.jumpTo({ zoom: Math.max(2.5, map.getZoom()) });
+              } catch (e) {
+                console.warn('Globe projection zoom adjustment failed:', e);
+              }
+            }, 100);
+          } else {
+            map.setProjection({ type: 'mercator' });
+          }
           console.log('Projection set to:', projection);
         } catch (err) {
           console.warn('Error setting projection:', err);
         }
       };
-      
-      // If style is already loaded, set projection immediately
-      if (map.isStyleLoaded()) {
-        setProjectionAfterStyleLoad();
-      } else {
-        // Otherwise wait for style.load event
-        map.once('style.load', setProjectionAfterStyleLoad);
-      }
+
+      const scheduleApply = () => {
+        // Wait for style to load
+        const run = () => {
+          // Defer until map is not easing/moving to reduce run() conflicts
+          if ((map.isEasing && map.isEasing()) || (map.isMoving && map.isMoving()) || isAnimatingRef.current) {
+            map.once('moveend', () => {
+              // After movement, ensure style is loaded then apply
+              if (map.isStyleLoaded()) applyProjection();
+              else map.once('style.load', applyProjection);
+            });
+            return;
+          }
+          applyProjection();
+        };
+
+        if (map.isStyleLoaded()) run();
+        else map.once('style.load', run);
+      };
+
+      scheduleApply();
     } catch (err) {
       console.warn('Error in projection effect:', err);
     }
   }, [projection, isMapLoaded]);
+
+  // Wait until the map is idle (style loaded and not moving/easing)
+  const waitForIdle = useCallback(async (map) => {
+    try {
+      if (!map) return;
+      // Wait for style
+      if (!map.isStyleLoaded()) {
+        await new Promise((res) => map.once('style.load', res));
+      }
+      // If moving/easing, wait for moveend; also guard with a short timeout
+      if ((map.isMoving && map.isMoving()) || (map.isEasing && map.isEasing()) || isAnimatingRef.current) {
+        await new Promise((res) => {
+          let done = false;
+          const finish = () => { if (!done) { done = true; res(); } };
+          map.once('moveend', finish);
+          setTimeout(finish, 300); // safety
+        });
+      }
+    } catch (e) {
+      console.warn('waitForIdle error:', e);
+    }
+  }, []);
 
   // Helpers for bbox drawing layer
   const addOrUpdateBboxLayer = useCallback((map, bbox) => {
@@ -616,25 +663,23 @@ function SFEOSMap() {
       
       // For globe projection, apply zoom adjustment to keep globe size consistent
       if (projection === 'globe') {
-        const currentLat = map.getCenter().lat;
+        const centerObj = (typeof map.getCenter === 'function') ? map.getCenter() : null;
+        const currentLat = centerObj && typeof centerObj.lat === 'number' ? centerObj.lat : centerLat;
         const targetLat = centerLat;
         // Calculate zoom adjustment: log2(cos(targetLat) / cos(currentLat))
         const zoomAdjustment = Math.log2(Math.cos(targetLat / 180 * Math.PI) / Math.cos(currentLat / 180 * Math.PI));
-        zoom = Math.max(2.8, Math.min(13, zoom + zoomAdjustment)); // Clamp between 2.8 and 13 for globe
+        zoom = Math.max(2.5, Math.min(13, zoom + zoomAdjustment)); // Use safer min zoom
         console.log('🌍 Globe zoom adjustment:', { currentLat, targetLat, zoomAdjustment, adjustedZoom: zoom });
       }
       
       console.log('🎯 Flying to:', { centerLon, centerLat, zoom, projection });
       
-      // Ensure map is ready before flying
+      // Ensure map is ready/idle before flying
       if (!map.isStyleLoaded()) {
         console.log('Map style not loaded yet, waiting...');
-        map.once('styledata', () => {
-          performFlyTo();
-        });
-      } else {
-        performFlyTo();
       }
+      await waitForIdle(map);
+      performFlyTo();
       
       function performFlyTo() {
         // Use flyTo for smooth animation - don't set viewState manually as it conflicts
@@ -653,7 +698,7 @@ function SFEOSMap() {
             pitch: 0,   // Reset pitch to top-down view
             duration: 1000,
             essential: true,
-            minZoom: 2.8  // Prevent globe from shrinking too much
+            minZoom: projection === 'globe' ? 2.5 : undefined
           });
         } catch (error) {
           console.error('Error in flyTo, using jumpTo fallback:', error);
@@ -683,7 +728,7 @@ function SFEOSMap() {
     } catch (error) {
       console.error('Error in handleShowItemsOnMap:', error);
     }
-  }, [addGeometry, clearGeometries, projection]);
+  }, [addGeometry, clearGeometries, projection, waitForIdle]);
 
   // Function to handle zooming to a bounding box
   const handleZoomToBbox = useCallback(async (event) => {
@@ -769,13 +814,20 @@ function SFEOSMap() {
         });
       }
       
-      // Use requestAnimationFrame to ensure map is ready
-      requestAnimationFrame(() => {
+      // Ensure map is ready/idle before scheduling fitBounds
+      await waitForIdle(map);
+      // Use requestAnimationFrame to ensure map is ready; cancel any previous scheduled frame
+      if (pendingRafRef.current) {
+        try { cancelAnimationFrame(pendingRafRef.current); } catch {}
+        pendingRafRef.current = null;
+      }
+      pendingRafRef.current = requestAnimationFrame(() => {
         try {
           // For globe projection, we need to apply zoom adjustment to keep globe size consistent
           let adjustedMaxZoom = maxZoom;
           if (projection === 'globe') {
-            const currentLat = map.getCenter().lat;
+            const centerObj2 = (typeof map.getCenter === 'function') ? map.getCenter() : null;
+            const currentLat = centerObj2 && typeof centerObj2.lat === 'number' ? centerObj2.lat : (minLat + maxLat) / 2;
             const targetLat = (minLat + maxLat) / 2;
             // Calculate zoom adjustment: log2(cos(targetLat) / cos(currentLat))
             const zoomAdjustment = Math.log2(Math.cos(targetLat / 180 * Math.PI) / Math.cos(currentLat / 180 * Math.PI));
@@ -795,7 +847,7 @@ function SFEOSMap() {
           map.fitBounds(bounds, {
             padding: padding,
             maxZoom: adjustedMaxZoom,
-            minZoom: 2.8,  // Prevent globe from shrinking too much
+            minZoom: projection === 'globe' ? 2.5 : undefined,
             duration: 1000
           });
           
@@ -819,7 +871,7 @@ function SFEOSMap() {
     } catch (error) {
       console.error('Error in handleZoomToBbox:', error);
     }
-  }, [projection]);
+  }, [projection, waitForIdle]);
 
   // The zoom to bbox functionality is handled by the handleZoomToBbox function
 
@@ -976,6 +1028,18 @@ function SFEOSMap() {
     const runSearchHandler = async (e) => {
       try {
         console.log('🔎 runSearch triggered, detail:', e?.detail);
+        
+        // Guard: ensure we have a map instance and it's loaded
+        const map = mapRef.current?.getMap();
+        if (!map) {
+          console.warn('⚠️ runSearch: No map instance available');
+          return;
+        }
+        if (!isMapLoaded) {
+          console.warn('⚠️ runSearch: Map not loaded yet');
+          return;
+        }
+        
         // Cancel any previous request
         if (searchControllerRef.current) {
           try { searchControllerRef.current.abort(); } catch {}
@@ -1030,8 +1094,13 @@ function SFEOSMap() {
             datetime: item.properties?.datetime || item.properties?.start_datetime || null
           }));
           
-          window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
-          window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
+          // Only dispatch camera events after successful, non-aborted search
+          if (latestSearchIdRef.current === mySearchId && !controller.signal.aborted) {
+            window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+            window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
+          } else {
+            console.log('🔄 Skipping camera events for aborted/stale search');
+          }
         } else if (bbox && bbox.length === 4 && selectedCollectionId === null) {
           // All Collections bbox search
           console.log('🔎 Searching all collections within drawn bbox');
@@ -1070,8 +1139,13 @@ function SFEOSMap() {
             datetime: item.properties?.datetime || item.properties?.start_datetime || null
           }));
           
-          window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
-          window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
+          // Only dispatch camera events after successful, non-aborted search
+          if (latestSearchIdRef.current === mySearchId && !controller.signal.aborted) {
+            window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+            window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
+          } else {
+            console.log('🔄 Skipping camera events for aborted/stale search (all collections)');
+          }
         } else {
           // No bbox drawn, trigger re-fetch of query items with current limit
           console.log('🔎 No bbox, re-fetching query items with limit:', lim);
@@ -1295,17 +1369,22 @@ function SFEOSMap() {
                 datetime: item.properties?.datetime || item.properties?.start_datetime || null
               }));
               
-              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
-              window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
-              
-              // Dispatch bbox search nextLink to update pagination
-              const bboxNextLink = data.links?.find(l => l.rel === 'next')?.href;
-              if (bboxNextLink) {
-                window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: bboxNextLink } }));
+              // Only dispatch camera events after successful, non-aborted search
+              if (latestSearchIdRef.current === mySearchId && !controller.signal.aborted) {
+                window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched } }));
+                window.dispatchEvent(new CustomEvent('zoomToBbox', { detail: { bbox } }));
+                
+                // Dispatch bbox search nextLink to update pagination
+                const bboxNextLink = data.links?.find(l => l.rel === 'next')?.href;
+                if (bboxNextLink) {
+                  window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: bboxNextLink } }));
+                }
+                
+                // Optionally exit draw mode after search
+                setIsDrawingBbox(false);
+              } else {
+                console.log('🔄 Skipping camera events for aborted/stale bbox search (collection)');
               }
-              
-              // Optionally exit draw mode after search
-              setIsDrawingBbox(false);
             }
           } catch (err) {
             if (err?.name === 'AbortError') {
@@ -1383,9 +1462,10 @@ function SFEOSMap() {
             ⛶
           </button>
         </div>
+        {/* Re-enable globe controls with safer implementation */}
         <div className="control-section">
           <div className="control-label">Globe</div>
-          <button 
+          <button
             className="fullscreen-btn"
             onClick={() => setProjection(projection === 'mercator' ? 'globe' : 'mercator')}
             title={projection === 'globe' ? "Switch to flat map" : "Switch to globe"}
