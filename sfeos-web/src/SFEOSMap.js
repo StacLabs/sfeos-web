@@ -38,11 +38,7 @@ function SFEOSMap() {
   const [mapStyle, setMapStyle] = useState(
     `https://api.maptiler.com/maps/streets/style.json?key=${process.env.REACT_APP_MAPTILER_KEY}`
   );
-  const [viewState, setViewState] = useState({
-    longitude: 28.9784,
-    latitude: 41.0151,
-    zoom: 3
-  });
+  // Map is left uncontrolled; use MapLibre camera directly
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [thumbnail, setThumbnail] = useState({ url: null, title: '', type: null });
@@ -63,6 +59,9 @@ function SFEOSMap() {
   const bboxLayers = useRef(new Set()); // Track bounding box layer IDs
   const stacApiUrlRef = useRef(stacApiUrl);
   const appliedDatetimeFilterRef = useRef(''); // Track datetime filter from StacCollectionDetails
+  const searchControllerRef = useRef(null); // AbortController for in-flight searches
+  const latestSearchIdRef = useRef(0); // Monotonic ID to ignore stale results
+  const isAnimatingRef = useRef(false); // Prevent overlapping map animations
 
   useEffect(() => {
     stacApiUrlRef.current = stacApiUrl;
@@ -70,6 +69,20 @@ function SFEOSMap() {
       window.localStorage.setItem('stacApiUrl', stacApiUrl);
     }
   }, [stacApiUrl]);
+
+  // Abort any in-flight search on unmount
+  useEffect(() => {
+    return () => {
+      try {
+        if (searchControllerRef.current) {
+          searchControllerRef.current.abort();
+          searchControllerRef.current = null;
+        }
+      } catch (e) {
+        // noop
+      }
+    };
+  }, []);
   
   // Event Handlers
   const handleMapLoad = useCallback((e) => {
@@ -416,7 +429,6 @@ function SFEOSMap() {
 
   const resetToInitialState = useCallback(() => {
     console.log('🔄 Resetting map to initial state');
-    setViewState({ ...DEFAULT_VIEW_STATE });
     setThumbnail({ url: null, title: '', type: null });
     setItemDetails(null);
     setIsDrawingBbox(false);
@@ -556,15 +568,36 @@ function SFEOSMap() {
       
       console.log('Combined bbox:', combinedBbox);
       
-      // Always use coordinate average for centering - more reliable than bbox center
-      let centerLon = (combinedBbox[0] + combinedBbox[2]) / 2;
-      let centerLat = (combinedBbox[1] + combinedBbox[3]) / 2;
-      
-      if (allCoords.length > 0) {
-        // Use coordinate average for better centering
-        centerLon = allCoords.reduce((sum, [lon]) => sum + lon, 0) / allCoords.length;
-        centerLat = allCoords.reduce((sum, [, lat]) => sum + lat, 0) / allCoords.length;
-        console.log('✅ Using coordinate average for center');
+      // Compute center: globe uses circular mean; flat uses simple averages (previous behavior)
+      let centerLon;
+      let centerLat;
+      if (projection === 'globe') {
+        // Helpers for longitude normalization around the antimeridian
+        const normalizeLon = (lon) => ((lon + 180) % 360 + 360) % 360 - 180;
+        const toRad = (d) => d * Math.PI / 180;
+        const toDeg = (r) => r * 180 / Math.PI;
+        const circularMeanLon = (lons) => {
+          if (!lons.length) return 0;
+          const rad = lons.map(l => toRad(normalizeLon(l)));
+          const s = rad.reduce((a, r) => a + Math.sin(r), 0);
+          const c = rad.reduce((a, r) => a + Math.cos(r), 0);
+          let mean = toDeg(Math.atan2(s, c));
+          if (mean > 180) mean -= 360;
+          if (mean <= -180) mean += 360;
+          return mean;
+        };
+        centerLon = circularMeanLon(allCoords.map(([lon]) => lon));
+        centerLat = allCoords.length > 0
+          ? allCoords.reduce((sum, [, lat]) => sum + lat, 0) / allCoords.length
+          : (combinedBbox[1] + combinedBbox[3]) / 2;
+      } else {
+        // Flat map: keep previous behavior
+        centerLon = (combinedBbox[0] + combinedBbox[2]) / 2;
+        centerLat = (combinedBbox[1] + combinedBbox[3]) / 2;
+        if (allCoords.length > 0) {
+          centerLon = allCoords.reduce((sum, [lon]) => sum + lon, 0) / allCoords.length;
+          centerLat = allCoords.reduce((sum, [, lat]) => sum + lat, 0) / allCoords.length;
+        }
       }
       
       console.log('✅ Center:', { centerLon, centerLat });
@@ -575,7 +608,8 @@ function SFEOSMap() {
       const [minLon, minLat, maxLon, maxLat] = combinedBbox;
       
       // Calculate zoom level based on bbox size
-      const lonDiff = maxLon - minLon;
+      let lonDiff = maxLon - minLon;
+      if (projection === 'globe' && lonDiff > 180) lonDiff = 360 - lonDiff; // AM-aware only on globe
       const latDiff = maxLat - minLat;
       const maxDiff = Math.max(lonDiff, latDiff, 0.001); // Ensure we don't get Infinity
       let zoom = Math.max(0, Math.min(13, 13 - Math.log2(maxDiff / 0.08))); // Reduced divisor from 0.12 to 0.08 for higher zoom
@@ -609,7 +643,9 @@ function SFEOSMap() {
           if (map.isEasing && map.isEasing()) {
             map.stop();
           }
-          
+          // Mark animating and clear on moveend
+          try { isAnimatingRef.current = true; } catch {}
+          map.once('moveend', () => { isAnimatingRef.current = false; });
           map.flyTo({
             center: [centerLon, centerLat],
             zoom: zoom,
@@ -631,15 +667,6 @@ function SFEOSMap() {
         }
       }
       
-      // Update view state after flyTo completes (flyTo will trigger onMove)
-      setTimeout(() => {
-        const center = map.getCenter();
-        setViewState({
-          longitude: center.lng,
-          latitude: center.lat,
-          zoom: map.getZoom()
-        });
-      }, 1100); // Slightly longer than flyTo duration
       
       // Add geometry for each valid item
       validGeometries.forEach(({ geometry, id, itemData }, index) => {
@@ -656,7 +683,7 @@ function SFEOSMap() {
     } catch (error) {
       console.error('Error in handleShowItemsOnMap:', error);
     }
-  }, [addGeometry, clearGeometries, setViewState, projection]);
+  }, [addGeometry, clearGeometries, projection]);
 
   // Function to handle zooming to a bounding box
   const handleZoomToBbox = useCallback(async (event) => {
@@ -761,20 +788,15 @@ function SFEOSMap() {
             map.stop();
           }
           
+          // Mark animating and clear on moveend
+          try { isAnimatingRef.current = true; } catch {}
+          map.once('moveend', () => { isAnimatingRef.current = false; });
           // Fit bounds with padding and max zoom
           map.fitBounds(bounds, {
             padding: padding,
             maxZoom: adjustedMaxZoom,
             minZoom: 2.8,  // Prevent globe from shrinking too much
             duration: 1000
-          });
-          
-          // Update view state
-          const center = map.getCenter();
-          setViewState({
-            longitude: center.lng,
-            latitude: center.lat,
-            zoom: map.getZoom()
           });
           
           console.log('Map view updated successfully');
@@ -954,6 +976,13 @@ function SFEOSMap() {
     const runSearchHandler = async (e) => {
       try {
         console.log('🔎 runSearch triggered, detail:', e?.detail);
+        // Cancel any previous request
+        if (searchControllerRef.current) {
+          try { searchControllerRef.current.abort(); } catch {}
+        }
+        const controller = new AbortController();
+        searchControllerRef.current = controller;
+        const mySearchId = ++latestSearchIdRef.current;
         const limFromEvent = Number(e?.detail?.limit);
         const lim = Number.isFinite(limFromEvent) && limFromEvent > 0 ? limFromEvent : 10;
         
@@ -975,9 +1004,14 @@ function SFEOSMap() {
           console.log('%c🔗 FULL API CALL:', 'color: blue; font-weight: bold; font-size: 14px;');
           console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
           window.dispatchEvent(new CustomEvent('hideOverlays'));
-          const resp = await fetch(url, { method: 'GET' });
+          const resp = await fetch(url, { method: 'GET', signal: controller.signal });
           if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
           const data = await resp.json();
+          // Ignore stale responses
+          if (latestSearchIdRef.current !== mySearchId || controller.signal.aborted) {
+            console.log('Ignoring stale or aborted search response');
+            return;
+          }
           const features = Array.isArray(data.features) ? data.features : [];
           console.log('%c📊 SEARCH RESULTS:', 'color: purple; font-weight: bold;');
           console.log('Features returned:', features.length);
@@ -1044,7 +1078,16 @@ function SFEOSMap() {
           window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: lim } }));
         }
       } catch (err) {
-        console.error('runSearch error:', err);
+        if (err?.name === 'AbortError') {
+          console.log('Search aborted');
+        } else {
+          console.error('runSearch error:', err);
+        }
+      } finally {
+        // Clear controller if it's still ours
+        if (searchControllerRef.current && searchControllerRef.current.signal.aborted) {
+          searchControllerRef.current = null;
+        }
       }
     };
     window.addEventListener('runSearch', runSearchHandler);
@@ -1112,11 +1155,7 @@ function SFEOSMap() {
         projection="mercator"
         renderWorldCopies={true}
         
-        // Use viewState for controlled component
-        longitude={viewState.longitude}
-        latitude={viewState.latitude}
-        zoom={viewState.zoom}
-        onMove={(evt) => setViewState(evt.viewState)}
+        // Leave map uncontrolled to avoid animation conflicts
         
         // Handle map load
         onLoad={handleMapLoad}
@@ -1159,6 +1198,14 @@ function SFEOSMap() {
             const bbox = currentBbox;
             if (!bbox || bbox.length !== 4) return;
             
+            // Cancel any previous request and set up a new controller
+            if (searchControllerRef.current) {
+              try { searchControllerRef.current.abort(); } catch {}
+            }
+            const controller = new AbortController();
+            searchControllerRef.current = controller;
+            const mySearchId = ++latestSearchIdRef.current;
+
             if (selectedCollectionId) {
               // Single collection bbox search
               console.log('🔎 Searching within drawn bbox for collection:', selectedCollectionId);
@@ -1176,9 +1223,13 @@ function SFEOSMap() {
               console.log('%c🔗 FULL API CALL (onMouseUp):', 'color: blue; font-weight: bold; font-size: 14px;');
               console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
               window.dispatchEvent(new CustomEvent('hideOverlays'));
-              const resp = await fetch(url, { method: 'GET' });
+              const resp = await fetch(url, { method: 'GET', signal: controller.signal });
               if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
               const data = await resp.json();
+              if (latestSearchIdRef.current !== mySearchId || controller.signal.aborted) {
+                console.log('Ignoring stale or aborted bbox search response (collection)');
+                return;
+              }
               const features = Array.isArray(data.features) ? data.features : [];
               
               // Process features to include properties and other metadata
@@ -1221,9 +1272,13 @@ function SFEOSMap() {
               console.log('%c🔗 FULL API CALL (All Collections onMouseUp):', 'color: blue; font-weight: bold; font-size: 14px;');
               console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
               window.dispatchEvent(new CustomEvent('hideOverlays'));
-              const resp = await fetch(url, { method: 'GET' });
+              const resp = await fetch(url, { method: 'GET', signal: controller.signal });
               if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
               const data = await resp.json();
+              if (latestSearchIdRef.current !== mySearchId || controller.signal.aborted) {
+                console.log('Ignoring stale or aborted bbox search response (all collections)');
+                return;
+              }
               const features = Array.isArray(data.features) ? data.features : [];
               console.log('%c📊 ALL COLLECTIONS SEARCH RESULTS (onMouseUp):', 'color: purple; font-weight: bold;');
               console.log('Features returned:', features.length);
@@ -1253,7 +1308,11 @@ function SFEOSMap() {
               setIsDrawingBbox(false);
             }
           } catch (err) {
-            console.error('Error performing bbox GET /search:', err);
+            if (err?.name === 'AbortError') {
+              console.log('BBox search aborted');
+            } else {
+              console.error('Error performing bbox GET /search:', err);
+            }
           }
         }}
         
