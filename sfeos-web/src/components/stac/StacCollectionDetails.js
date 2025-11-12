@@ -116,9 +116,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
   // Detect collection changes and reset state
   useEffect(() => {
-    if (collection && collection.id && prevCollectionId.current !== collection.id) {
-      prevCollectionId.current = collection.id;
-      // Reset state when collection changes
+    const currentCollectionId = collection?.id || null;
+    if (prevCollectionId.current !== currentCollectionId) {
+      prevCollectionId.current = currentCollectionId;
+
+      // Reset state when collection changes or when switching to "All Collections"
       setIsQueryItemsVisible(false);
       setItemLimit(10);
       setItemLimitDisplay('10');
@@ -126,84 +128,25 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       setSelectedItemId(null);
       setIsDescriptionExpanded(false);
       setIsBoundingBoxVisible(false);
+      setNumberReturned(null);
+      setNumberMatched(null);
+
+      // Clear any map overlays/geometries related to the previous collection
+      try {
+        window.dispatchEvent(new CustomEvent('clearItemGeometries'));
+      } catch (err) {
+        console.warn('Failed to dispatch clearItemGeometries on collection change:', err);
+      }
+      // Abort pending searches and clear cached results on the map
+      try {
+        window.dispatchEvent(new CustomEvent('clearSearchCache'));
+      } catch (err) {
+        console.warn('Failed to dispatch clearSearchCache on collection change:', err);
+      }
     }
   }, [collection, stacApiUrl]);
 
-  // Fetch query items when the component mounts or collection changes
-  useEffect(() => {
-    if (collection && collection.id) {
-      // Fetch items from the collection using STAC API
-      const fetchItems = async () => {
-        try {
-          const baseUrl = stacApiUrlRef.current || process.env.REACT_APP_STAC_API_BASE_URL || 'http://localhost:8080';
-          const currentLimit = itemLimitRef.current;
-          const datetimeFilter = appliedDatetimeFilterRef.current;
-          const url = buildItemsUrl(baseUrl, collection.id, currentLimit, datetimeFilter);
-          
-          const response = await fetch(url);
-          if (response.ok) {
-            const data = await response.json();
-            
-            captureSearchCounts(data);
-            extractNextLink(data);
-            
-            if (data.features && data.features.length > 0) {
-              const items = processItems(data.features);
-              setQueryItems(items);
-              
-              // Also update the map with the new items for individual collections
-              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items } }));
-            } else {
-              handleFetchError();
-            }
-          } else {
-            const errorText = await response.text();
-            handleFetchError(errorText);
-          }
-        } catch (error) {
-          handleFetchError();
-        }
-      };
-      fetchItems();
-    } else if (collection === null) {
-      // "All Collections" mode - fetch from /search endpoint
-      setIsLoadingItems(true); // Set loading to true at the start
-      const fetchAllCollections = async () => {
-        try {
-          const baseUrl = stacApiUrlRef.current || process.env.REACT_APP_STAC_API_BASE_URL || 'http://localhost:8080';
-          const currentLimit = itemLimitRef.current;
-          const datetimeFilter = appliedDatetimeFilterRef.current;
-          let url = `${baseUrl}/search?limit=${currentLimit}`;
-          if (datetimeFilter) {
-            url += `&datetime=${encodeURIComponent(datetimeFilter)}`;
-          }
-          
-          const response = await fetch(url);
-          if (response.ok) {
-            const data = await response.json();
-            
-            captureSearchCounts(data);
-            extractNextLink(data);
-            
-            if (data.features && data.features.length > 0) {
-              const items = processItems(data.features);
-              setQueryItems(items);
-            } else {
-              handleFetchError();
-            }
-          } else {
-            const errorText = await response.text();
-            handleFetchError(errorText);
-          }
-        } catch (error) {
-          handleFetchError();
-        }
-      };
-      fetchAllCollections().finally(() => {
-        setIsLoadingItems(false); // Ensure loading is set to false when done
-      });
-    }
-  }, [collection, processItems]);
+  // Removed automatic fetching on collection change; items load only via explicit query
 
   const handleLoadNext = async (e) => {
     try {
@@ -300,9 +243,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             // Also update the map with the new items
             window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items } }));
           }
+        } else {
+          handleFetchError(`HTTP ${response.status}: ${response.statusText}`);
         }
       } catch (err) {
-        // Error handled silently
+        handleFetchError(err.message || 'Unknown error');
       } finally {
         setIsLoadingItems(false);
       }
@@ -1193,8 +1138,10 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   className="search-btn"
                   title="Search (bbox if drawn, else query items)"
                   aria-label="Search"
+                  disabled={isLoadingItems}
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (isLoadingItems) return;
                     try {
                       window.dispatchEvent(new CustomEvent('runSearch', { detail: { limit: itemLimit } }));
                     } catch (err) {

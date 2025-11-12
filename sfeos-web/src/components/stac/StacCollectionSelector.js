@@ -18,6 +18,8 @@ function StacCollectionSelector({
       // Special case for "All Collections" or placeholder selection - pass null collection
       try {
         window.dispatchEvent(new CustomEvent('hideOverlays'));
+        window.dispatchEvent(new CustomEvent('clearItemGeometries'));
+        window.dispatchEvent(new CustomEvent('clearSearchCache'));
         window.dispatchEvent(new CustomEvent('selectedCollectionChanged', { detail: { collectionId: null } }));
       } catch (err) {
         console.warn('Failed to dispatch hideOverlays on all-collections change:', err);
@@ -30,6 +32,8 @@ function StacCollectionSelector({
         // Close any open overlays when changing collections
         try {
           window.dispatchEvent(new CustomEvent('hideOverlays'));
+          window.dispatchEvent(new CustomEvent('clearItemGeometries'));
+          window.dispatchEvent(new CustomEvent('clearSearchCache'));
           window.dispatchEvent(new CustomEvent('selectedCollectionChanged', { detail: { collectionId: collection.id } }));
         } catch (err) {
           console.warn('Failed to dispatch hideOverlays on collection change:', err);
