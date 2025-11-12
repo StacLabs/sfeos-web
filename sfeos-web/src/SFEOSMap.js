@@ -522,51 +522,82 @@ function SFEOSMap() {
       
       // Calculate combined bounds from all geometries
       let combinedBbox = [Infinity, Infinity, -Infinity, -Infinity];
+      const allCoords = [];
+      
+      const updateBbox = (lon, lat) => {
+        combinedBbox[0] = Math.min(combinedBbox[0], lon);
+        combinedBbox[1] = Math.min(combinedBbox[1], lat);
+        combinedBbox[2] = Math.max(combinedBbox[2], lon);
+        combinedBbox[3] = Math.max(combinedBbox[3], lat);
+        allCoords.push([lon, lat]);
+      };
       
       validGeometries.forEach(({ geometry }) => {
-        if (geometry.type === 'Polygon' && geometry.coordinates) {
-          geometry.coordinates[0].forEach(([lon, lat]) => {
-            combinedBbox[0] = Math.min(combinedBbox[0], lon);
-            combinedBbox[1] = Math.min(combinedBbox[1], lat);
-            combinedBbox[2] = Math.max(combinedBbox[2], lon);
-            combinedBbox[3] = Math.max(combinedBbox[3], lat);
-          });
-        } else if (geometry.type === 'Point' && geometry.coordinates) {
+        if (!geometry) return;
+        
+        if (geometry.type === 'Point' && geometry.coordinates) {
           const [lon, lat] = geometry.coordinates;
-          combinedBbox[0] = Math.min(combinedBbox[0], lon);
-          combinedBbox[1] = Math.min(combinedBbox[1], lat);
-          combinedBbox[2] = Math.max(combinedBbox[2], lon);
-          combinedBbox[3] = Math.max(combinedBbox[3], lat);
+          updateBbox(lon, lat);
+        } else if (geometry.type === 'LineString' && geometry.coordinates) {
+          geometry.coordinates.forEach(([lon, lat]) => updateBbox(lon, lat));
+        } else if (geometry.type === 'Polygon' && geometry.coordinates) {
+          geometry.coordinates[0].forEach(([lon, lat]) => updateBbox(lon, lat));
+        } else if (geometry.type === 'MultiPoint' && geometry.coordinates) {
+          geometry.coordinates.forEach(([lon, lat]) => updateBbox(lon, lat));
+        } else if (geometry.type === 'MultiLineString' && geometry.coordinates) {
+          geometry.coordinates.forEach(line => {
+            line.forEach(([lon, lat]) => updateBbox(lon, lat));
+          });
+        } else if (geometry.type === 'MultiPolygon' && geometry.coordinates) {
+          geometry.coordinates.forEach(polygon => {
+            polygon[0].forEach(([lon, lat]) => updateBbox(lon, lat));
+          });
         }
       });
       
       console.log('Combined bbox:', combinedBbox);
+      console.log('All coordinates count:', allCoords.length);
+      
+      // Calculate center as average of all coordinates (more accurate for globe)
+      let centerLon = combinedBbox[0];
+      let centerLat = combinedBbox[1];
+      
+      if (allCoords.length > 0) {
+        const avgLon = allCoords.reduce((sum, [lon]) => sum + lon, 0) / allCoords.length;
+        const avgLat = allCoords.reduce((sum, [, lat]) => sum + lat, 0) / allCoords.length;
+        centerLon = avgLon;
+        centerLat = avgLat;
+        console.log('✅ Center from average:', { centerLon, centerLat });
+        console.log('📍 Bbox corners:', { minLon: combinedBbox[0], minLat: combinedBbox[1], maxLon: combinedBbox[2], maxLat: combinedBbox[3] });
+      }
       
       // Zoom to the combined bounds
       const [minLon, minLat, maxLon, maxLat] = combinedBbox;
-      
-      // Ensure valid coordinates
-      if (![minLon, minLat, maxLon, maxLat].every(coord => 
-        typeof coord === 'number' && !isNaN(coord)
-      )) {
-        throw new Error('Invalid coordinates in bbox');
-      }
-      
-      const centerLon = (minLon + maxLon) / 2;
-      const centerLat = (minLat + maxLat) / 2;
       
       // Calculate zoom level based on bbox size
       const lonDiff = maxLon - minLon;
       const latDiff = maxLat - minLat;
       const maxDiff = Math.max(lonDiff, latDiff, 0.001); // Ensure we don't get Infinity
-      const zoom = Math.max(0, Math.min(12, 12 - Math.log2(maxDiff / 0.1)));
+      let zoom = Math.max(0, Math.min(13, 13 - Math.log2(maxDiff / 0.12))); // Balanced: 13 max, 0.12 divisor
       
-      console.log('Setting map view:', { centerLon, centerLat, zoom });
+      // For globe projection, apply zoom adjustment to keep globe size consistent
+      if (projection === 'globe') {
+        const currentLat = map.getCenter().lat;
+        const targetLat = centerLat;
+        // Calculate zoom adjustment: log2(cos(targetLat) / cos(currentLat))
+        const zoomAdjustment = Math.log2(Math.cos(targetLat / 180 * Math.PI) / Math.cos(currentLat / 180 * Math.PI));
+        zoom = Math.max(1.5, zoom + zoomAdjustment); // Balanced min zoom
+        console.log('🌍 Globe zoom adjustment:', { currentLat, targetLat, zoomAdjustment, adjustedZoom: zoom });
+      }
+      
+      console.log('🎯 Flying to:', { centerLon, centerLat, zoom, projection });
       
       // Use flyTo for smooth animation - don't set viewState manually as it conflicts
       map.flyTo({
         center: [centerLon, centerLat],
         zoom: zoom,
+        bearing: 0, // Reset bearing to face north
+        pitch: 0,   // Reset pitch to top-down view
         duration: 1000,
         essential: true
       });
@@ -585,7 +616,10 @@ function SFEOSMap() {
       validGeometries.forEach(({ geometry, id, itemData }, index) => {
         const hue = (index * 137.5) % 360; // Golden angle for distinct colors
         const color = `hsl(${hue}, 80%, 50%)`;
-        console.log(`🎨 Adding geometry for item ${index} (${id}):`, geometry);
+        // Only log first and last items to reduce console spam
+        if (index === 0 || index === validGeometries.length - 1) {
+          console.log(`🎨 Adding geometry for item ${index} (${id}):`, geometry);
+        }
         addGeometry(map, id, geometry, color, 2, itemData);
       });
       
@@ -593,7 +627,7 @@ function SFEOSMap() {
     } catch (error) {
       console.error('Error in handleShowItemsOnMap:', error);
     }
-  }, [addGeometry, clearGeometries, setViewState]);
+  }, [addGeometry, clearGeometries, setViewState, projection]);
 
   // Function to handle zooming to a bounding box
   const handleZoomToBbox = useCallback(async (event) => {
@@ -682,10 +716,21 @@ function SFEOSMap() {
       // Use requestAnimationFrame to ensure map is ready
       requestAnimationFrame(() => {
         try {
+          // For globe projection, we need to apply zoom adjustment to keep globe size consistent
+          let adjustedMaxZoom = maxZoom;
+          if (projection === 'globe') {
+            const currentLat = map.getCenter().lat;
+            const targetLat = (minLat + maxLat) / 2;
+            // Calculate zoom adjustment: log2(cos(targetLat) / cos(currentLat))
+            const zoomAdjustment = Math.log2(Math.cos(targetLat / 180 * Math.PI) / Math.cos(currentLat / 180 * Math.PI));
+            adjustedMaxZoom = Math.max(1, maxZoom + zoomAdjustment);
+            console.log('Globe zoom adjustment:', zoomAdjustment, 'currentLat:', currentLat, 'targetLat:', targetLat, 'adjusted maxZoom:', adjustedMaxZoom);
+          }
+          
           // Fit bounds with padding and max zoom
           map.fitBounds(bounds, {
             padding: padding,
-            maxZoom: maxZoom,
+            maxZoom: adjustedMaxZoom,
             duration: 1000
           });
           
