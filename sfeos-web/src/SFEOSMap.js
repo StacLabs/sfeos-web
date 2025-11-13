@@ -1421,6 +1421,12 @@ function SFEOSMap() {
           } 
         }));
         
+        // Dispatch nextLink to update pagination for Next button
+        const nextSearchLink = data.links?.find(l => l.rel === 'next')?.href;
+        if (nextSearchLink) {
+          window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: nextSearchLink } }));
+        }
+        
       } catch (err) {
         if (err?.name === 'AbortError') {
           console.log('Search aborted');

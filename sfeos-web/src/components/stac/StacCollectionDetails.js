@@ -447,8 +447,9 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     // "All Collections" mode - show simplified interface focused on query items
     return (
       <>
-        {isLoadingItems && <LoadingIndicator message="Loading items..." />}
-        <div className="query-items">
+      {isLoadingItems && <LoadingIndicator message="Loading items..." />}
+      {isLoadingNext && <LoadingIndicator message="Loading next page..." />}
+      <div className="query-items">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               className="stac-expand-btn"
@@ -953,6 +954,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   return (
     <>
       {isLoadingItems && <LoadingIndicator message="Loading items..." />}
+      {isLoadingNext && <LoadingIndicator message="Loading next page..." />}
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
