@@ -805,7 +805,7 @@ function SFEOSMap() {
       
       const hasFiniteBounds = combinedBbox.every((value) => Number.isFinite(value));
       if (!hasFiniteBounds) {
-        console.warn('⚠️ Combined bbox contains non-finite values, skipping camera update.', combinedBbox);
+        console.warn('⚠️ Combined bbox contains non-finite values, will use fallback zoom.', combinedBbox);
       }
 
       // Zoom to the combined bounds
@@ -889,27 +889,34 @@ function SFEOSMap() {
       });
       console.log('✅ Map updated with', geometriesWithCoords.length, 'geometries');
 
-      // 6. WAIT FOR NEW LAYERS TO RENDER
-      await waitForIdle(map);
+      // 6. SMALL DELAY TO ALLOW LAYERS TO RENDER
+      console.log('⏳ Adding small delay for layers to render...');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      console.log('✅ Proceeding to flyTo animation');
 
       // 7. FINALLY, FLY THE CAMERA
       console.log('🎯 Flying to:', { centerLon, centerLat, zoom, projection });
+      console.log('📊 FlyTo conditions:', { hasFiniteBounds, centerLonFinite: Number.isFinite(centerLon), centerLatFinite: Number.isFinite(centerLat), zoomFinite: Number.isFinite(zoom) });
 
-      if (hasFiniteBounds && Number.isFinite(centerLon) && Number.isFinite(centerLat) && Number.isFinite(zoom)) {
-        if (isChangingProjectionRef.current) {
-          console.warn('⏳ Skipping flyTo - projection change in progress');
-          return;
-        }
-        
-        if (!map || !map.getCanvas || !map.getCanvas()) {
-          console.error('❌ Map became invalid before flyTo');
-          return;
-        }
-        
-        performFlyTo();
-      } else {
-        console.warn('Skipping flyTo - invalid camera parameters:', { hasFiniteBounds, centerLon, centerLat, zoom });
+      // Always try to fly to center, even if bounds are invalid (use fallback zoom)
+      const safeZoom = Number.isFinite(zoom) ? zoom : 8;
+      const safeCenterLon = Number.isFinite(centerLon) ? centerLon : 0;
+      const safeCenterLat = Number.isFinite(centerLat) ? centerLat : 0;
+      
+      console.log('✅ Attempting flyTo with:', { safeCenterLon, safeCenterLat, safeZoom, hasFiniteBounds });
+      
+      if (isChangingProjectionRef.current) {
+        console.warn('⏳ Skipping flyTo - projection change in progress');
+        return;
       }
+      
+      if (!map || !map.getCanvas || !map.getCanvas()) {
+        console.error('❌ Map became invalid before flyTo');
+        return;
+      }
+      
+      console.log('✅ Map is valid, calling performFlyTo');
+      performFlyTo();
       
       function performFlyTo() {
         try {
@@ -917,37 +924,40 @@ function SFEOSMap() {
             map.stop();
           }
           
-          let safeZoom = zoom;
-          if (!Number.isFinite(safeZoom)) {
-            console.error('❌ performFlyTo: zoom is not finite:', safeZoom, '- using fallback');
-            safeZoom = 8;
-          }
-          safeZoom = Math.max(0, Math.min(28, safeZoom));
+          // Use the safe values we calculated before calling this function
+          let finalCenterLon = safeCenterLon;
+          let finalCenterLat = safeCenterLat;
           
-          let safeCenterLon = centerLon;
-          let safeCenterLat = centerLat;
-          if (!Number.isFinite(safeCenterLon)) {
-            console.error('❌ performFlyTo: centerLon is not finite:', safeCenterLon, '- using default');
-            safeCenterLon = 0;
+          // For globe, fly to center without changing zoom
+          if (projection === 'globe') {
+            console.log('🌍 Flying globe to center:', { lon: finalCenterLon, lat: finalCenterLat });
+            const currentZoom = map.getZoom();
+            map.flyTo({
+              center: [finalCenterLon, finalCenterLat],
+              zoom: currentZoom, // Keep current zoom
+              duration: 1000,
+              essential: true
+            });
+            return;
           }
-          if (!Number.isFinite(safeCenterLat)) {
-            console.error('❌ performFlyTo: centerLat is not finite:', safeCenterLat, '- using default');
-            safeCenterLat = 0;
-          }
+          
+          // For flat map, use flyTo with calculated zoom
+          let finalZoom = safeZoom;
+          finalZoom = Math.max(0, Math.min(28, finalZoom));
           
           try { isAnimatingRef.current = true; } catch {}
           map.once('moveend', () => { isAnimatingRef.current = false; });
-          const safeCenter = (projection === 'globe' && (Math.abs(safeCenterLon) > 180 || Math.abs(safeCenterLat) > 90))
-            ? [((safeCenterLon + 180) % 360 + 360) % 360 - 180, Math.max(-85, Math.min(85, safeCenterLat))]
-            : [safeCenterLon, safeCenterLat];
+          
+          const safeCenter = [finalCenterLon, finalCenterLat];
+          
+          console.log('🚀 Calling map.flyTo with:', { center: safeCenter, zoom: finalZoom });
           map.flyTo({
             center: safeCenter,
-            zoom: safeZoom,
+            zoom: finalZoom,
             bearing: 0,
             pitch: 0,
             duration: 1000,
-            essential: true,
-            minZoom: projection === 'globe' ? 2.5 : undefined
+            essential: true
           });
         } catch (error) {
           console.error('Error in flyTo, using jumpTo fallback:', error);
@@ -972,7 +982,7 @@ function SFEOSMap() {
             pitch: 0
           });
         }
-      }
+      };
     } catch (error) {
       console.error('Error in handleShowItemsOnMap:', error);
     }
