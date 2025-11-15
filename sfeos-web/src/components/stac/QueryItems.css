@@ -277,23 +277,58 @@
 .datetime-filter-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .datetime-filter-group label {
-  font-size: 0.60rem;
+  font-size: 0.55rem;
   font-weight: 600;
-  color: #333;
+  color: #666;
   text-align: left;
 }
 
-.datetime-filter-group input {
-  padding: 6px 8px;
+.datetime-filter-group input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 200px;
+  height: 4px;
+  background: #ddd;
+  outline: none;
+  border-radius: 2px;
+}
+
+.datetime-filter-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #007bff;
+  cursor: pointer;
+  box-shadow: 0 0 2px rgba(0,123,255,0.3);
+}
+
+.datetime-filter-group input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #007bff;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 2px rgba(0,123,255,0.3);
+}
+
+.datetime-filter-group input[type="range"]:focus {
+  outline: none;
+}
+
+.datetime-filter-group input[type="range"]:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 4px rgba(0,123,255,0.6);
+}
+
+.datetime-filter-group input[type="datetime-local"] {
   font-size: 0.65rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.9);
+  padding: 4px 6px;
 }
 
 .query-items-count {

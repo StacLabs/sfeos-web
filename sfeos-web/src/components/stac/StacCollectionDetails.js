@@ -675,7 +675,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     setIsFilterOpen(!isFilterOpen);
                   }}
                 >
-                  🔍
+                  Filter
                 </button>
               </div>
               {queryItems.length > 0 ? (
@@ -741,8 +741,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 </div>
                 <div className="datetime-filter-content">
                   {/* Datetime Filter Section */}
-                  <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #ddd' }}>
-                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>Date Range</h4>
+                  <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #ddd' }}>
+                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
                     <div className="datetime-filter-group">
                       <label htmlFor="start-date">Start Date:</label>
                       <input
@@ -750,22 +750,24 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                         type="datetime-local"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
+                        style={{ maxWidth: '200px' }}
                       />
                     </div>
-                    <div className="datetime-filter-group">
+                    <div className="datetime-filter-group" style={{ marginTop: '8px' }}>
                       <label htmlFor="end-date">End Date:</label>
                       <input
                         id="end-date"
                         type="datetime-local"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
+                        style={{ maxWidth: '200px' }}
                       />
                     </div>
                   </div>
 
                   {/* Cloud Cover Filter Section */}
                   <div style={{ marginBottom: '20px' }}>
-                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>Cloud Cover</h4>
+                    <h4 style={{ margin: '0 0 2px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
                     <div className="datetime-filter-group">
                       <label htmlFor="cloud-cover-slider">Max Cloud Cover: {cloudCoverMax}%</label>
                       <input
@@ -775,7 +777,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                         max="100"
                         value={cloudCoverMax}
                         onChange={(e) => setCloudCoverMax(Number(e.target.value))}
-                        style={{ width: '100%' }}
+                        style={{ width: '200px' }}
                       />
                     </div>
                   </div>
@@ -1292,7 +1294,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   setIsFilterOpen(!isFilterOpen);
                 }}
               >
-                🔍
+                Filter
               </button>
             </div>
             {queryItems.length > 0 ? (
@@ -1360,8 +1362,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             </div>
             <div className="datetime-filter-content">
               {/* Datetime Filter Section */}
-              <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #ddd' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>Date Range</h4>
+              <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #ddd' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
                 <div className="datetime-filter-group">
                   <label htmlFor="start-date">Start Date:</label>
                   <input
@@ -1369,22 +1371,24 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     type="datetime-local"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
+                    style={{ maxWidth: '200px' }}
                   />
                 </div>
-                <div className="datetime-filter-group">
+                <div className="datetime-filter-group" style={{ marginTop: '8px' }}>
                   <label htmlFor="end-date">End Date:</label>
                   <input
                     id="end-date"
                     type="datetime-local"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
+                    style={{ maxWidth: '200px' }}
                   />
                 </div>
               </div>
 
               {/* Cloud Cover Filter Section */}
-              <div style={{ marginBottom: '20px' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>Cloud Cover</h4>
+              <div style={{ marginBottom: '10px' }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
                 <div className="datetime-filter-group">
                   <label htmlFor="cloud-cover-slider">Max Cloud Cover: {cloudCoverMax}%</label>
                   <input
@@ -1394,7 +1398,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     max="100"
                     value={cloudCoverMax}
                     onChange={(e) => setCloudCoverMax(Number(e.target.value))}
-                    style={{ width: '100%' }}
+                    style={{ width: '200px' }}
                   />
                 </div>
               </div>
