@@ -65,6 +65,7 @@ function SFEOSMap() {
   const isAnimatingRef = useRef(false); // Prevent overlapping map animations
   const pendingRafRef = useRef(null); // Track scheduled requestAnimationFrame
   const isChangingProjectionRef = useRef(false); // Track if projection change is in progress
+  const lastSearchUrlRef = useRef(null); // Track the last search URL for download
 
   useEffect(() => {
     stacApiUrlRef.current = stacApiUrl;
@@ -438,27 +439,49 @@ function SFEOSMap() {
       
       // Add click handler for item details if itemData is provided
       if (itemData) {
-        map.on('click', `geometry-fill-${id}`, (e) => {
+        map.on('click', `geometry-fill-${id}`, async (e) => {
           console.log('🖱️ Clicked on geometry:', id, itemData);
           
-          // Select the item in the list
+          // 1. Select the item in the list (this is still fast)
           window.dispatchEvent(new CustomEvent('selectItem', {
             detail: { itemId: itemData.id }
           }));
           
-          // Show item details overlay
-          window.dispatchEvent(new CustomEvent('showItemDetails', {
-            detail: {
-              id: itemData.id,
-              title: itemData.title || itemData.id,
-              datetime: itemData.datetime || null,
-              assetsCount: itemData.assetsCount || 0,
-              bbox: itemData.bbox || null,
-              collection: itemData.collection || null,
-              properties: itemData.properties || {}
-            }
-          }));
-          
+          // 2. Show a loading state in the details panel
+          window.dispatchEvent(new CustomEvent('showItemDetails', { detail: { isLoading: true, id: itemData.id } }));
+
+          try {
+            // 3. Fetch the FULL item details
+            console.log('%c🔗 FETCHING FULL ITEM DETAILS:', 'color: purple; font-weight: bold; font-size: 14px;');
+            console.log('%cLazy loading full details for item:', itemData.id, 'color: purple;');
+            const baseUrl = stacApiUrlRef.current;
+            const itemUrl = `${baseUrl}/collections/${itemData.collection}/items/${itemData.id}`;
+            console.log('%cGET ' + itemUrl, 'color: purple; font-family: monospace; font-size: 12px;');
+            console.log('%c📋 Fetching complete item metadata (no fields limitation)', 'color: red; font-weight: bold;');
+            
+            const resp = await fetch(itemUrl);
+            if (!resp.ok) throw new Error('Failed to fetch full item details');
+            const fullItemDetails = await resp.json();
+
+            // 4. Dispatch the full details to the overlay
+            window.dispatchEvent(new CustomEvent('showItemDetails', {
+              detail: {
+                id: fullItemDetails.id,
+                title: fullItemDetails.properties?.title || fullItemDetails.id,
+                datetime: fullItemDetails.properties?.datetime || null,
+                assetsCount: Object.keys(fullItemDetails.assets || {}).length,
+                bbox: fullItemDetails.bbox || null,
+                collection: fullItemDetails.collection || null,
+                properties: fullItemDetails.properties || {}
+              }
+            }));
+
+          } catch (fetchError) {
+            console.error("Failed to fetch full item:", fetchError);
+            // Show an error in the details panel
+            window.dispatchEvent(new CustomEvent('showItemDetails', { detail: { error: true, id: itemData.id } }));
+          }
+
           // Zoom to the item's bbox if available with better zoom level
           if (itemData.bbox) {
             const zoomEvent = new CustomEvent('zoomToBbox', { 
@@ -500,7 +523,7 @@ function SFEOSMap() {
       });
     }
   }, []);
-  
+
   // Function to clear all geometries
   const clearGeometries = useCallback((map) => {
     if (!map || !map.getStyle || !map.getStyle()) {
@@ -967,7 +990,7 @@ function SFEOSMap() {
           
           const safeCenter = [finalCenterLon, finalCenterLat];
           
-          console.log('🚀 Calling map.flyTo with:', { center: safeCenter, zoom: finalZoom });
+          console.log('Using flyTo with center:', safeCenter, 'zoom:', finalZoom);
           map.flyTo({
             center: safeCenter,
             zoom: finalZoom,
@@ -1124,7 +1147,10 @@ function SFEOSMap() {
           // Mark animating and clear on moveend
           try { isAnimatingRef.current = true; } catch {}
           map.once('moveend', () => { isAnimatingRef.current = false; });
-          // Fit bounds with padding and max zoom
+          
+          const safeCenter = [((minLon + maxLon) / 2), ((minLat + maxLat) / 2)];
+          
+          console.log('Using fitBounds with center:', safeCenter, 'padding:', padding, 'maxZoom:', adjustedMaxZoom);
           map.fitBounds(bounds, {
             padding: padding,
             maxZoom: adjustedMaxZoom,
@@ -1342,7 +1368,7 @@ function SFEOSMap() {
         // Build URL - unified for all search types
         const bbox = currentBbox;
         const baseUrl = stacApiUrlRef.current;
-        let url = `${baseUrl}/search?limit=${encodeURIComponent(lim)}`;
+        let url = `${baseUrl}/search?limit=${encodeURIComponent(lim)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
         
         // Add bbox if present
         if (bbox && bbox.length === 4) {
@@ -1368,8 +1394,10 @@ function SFEOSMap() {
         }
         
         // Perform fetch
-        console.log('%c🔗 FULL API CALL:', 'color: blue; font-weight: bold; font-size: 14px;');
+        console.log('%c🔗 INITIAL MAP LOAD:', 'color: blue; font-weight: bold; font-size: 14px;');
         console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
+        console.log('%c📋 Using fields extension for fast map display', 'color: orange; font-weight: bold;');
+        lastSearchUrlRef.current = url; // Store for download
         window.dispatchEvent(new CustomEvent('hideOverlays'));
         
         const resp = await fetch(url, { method: 'GET', signal: controller.signal });
@@ -1410,6 +1438,12 @@ function SFEOSMap() {
           } 
         }));
         
+        // Dispatch nextLink to update pagination for Next button
+        const nextSearchLink = data.links?.find(l => l.rel === 'next')?.href;
+        if (nextSearchLink) {
+          window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: nextSearchLink } }));
+        }
+        
       } catch (err) {
         if (err?.name === 'AbortError') {
           console.log('Search aborted');
@@ -1424,6 +1458,56 @@ function SFEOSMap() {
       }
     };
     window.addEventListener('runSearch', runSearchHandler);
+    
+    const downloadFullResultsHandler = async () => {
+      try {
+        const lastUrl = lastSearchUrlRef.current;
+        if (!lastUrl) {
+          alert('No search has been performed yet. Please search for items first.');
+          return;
+        }
+        
+        // Remove the fields parameter from the URL
+        const url = new URL(lastUrl);
+        url.searchParams.delete('fields');
+        const fullUrl = url.toString();
+        
+        console.log('%c🔗 DOWNLOADING FULL RESULTS:', 'color: green; font-weight: bold; font-size: 14px;');
+        console.log('%cOriginal search URL:', lastUrl, 'color: green;');
+        console.log('%cDownload URL (no fields):', fullUrl, 'color: green; font-family: monospace; font-size: 12px;');
+        console.log('%c📋 Downloading complete feature collection with all metadata', 'color: red; font-weight: bold;');
+        
+        const resp = await fetch(fullUrl);
+        if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
+        const data = await resp.json();
+        
+        const features = Array.isArray(data.features) ? data.features : [];
+        
+        // Create filename
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+        const filename = `search_results_${timestamp}.geojson`;
+        
+        // Create and download the file
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/geo+json' });
+        const url_blob = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url_blob;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        URL.revokeObjectURL(url_blob);
+        
+        alert(`Downloaded ${features.length} items to ${filename}`);
+        
+      } catch (error) {
+        console.error('Download error:', error);
+        alert(`Failed to download results: ${error.message}`);
+      }
+    };
+    window.addEventListener('downloadFullResults', downloadFullResultsHandler);
     
     const clearBboxHandler = () => {
       const map = mapRef.current?.getMap();
@@ -1448,9 +1532,10 @@ function SFEOSMap() {
       try {
         // Abort any pending searches
         if (searchControllerRef.current) {
-          searchControllerRef.current.abort();
-          searchControllerRef.current = null;
+          try { searchControllerRef.current.abort(); } catch {}
         }
+        const controller = new AbortController();
+        searchControllerRef.current = controller;
         
         // Clear search state
         latestSearchIdRef.current = 0;
@@ -1502,8 +1587,10 @@ function SFEOSMap() {
       window.removeEventListener('selectedCollectionChanged', selectedCollectionChangedHandler);
       window.removeEventListener('itemLimitChanged', itemLimitChangedHandler);
       window.removeEventListener('runSearch', runSearchHandler);
+      window.removeEventListener('downloadFullResults', downloadFullResultsHandler);
       window.removeEventListener('clearBbox', clearBboxHandler);
       window.removeEventListener('clearItemGeometries', clearItemGeometriesHandler);
+      window.removeEventListener('clearSearchCache', clearSearchCacheHandler);
     };
   }, [isMapLoaded, handleZoomToBbox, handleShowItemsOnMap, isDrawingBbox, clearBboxLayer, clearGeometries, currentBbox, selectedCollectionId, currentItemLimit]);
 
@@ -1584,7 +1671,7 @@ function SFEOSMap() {
               const bboxParam = bbox.map(n => Number(n)).join(',');
               const limitParam = currentItemLimit;
               const baseUrl = stacApiUrlRef.current;
-              let url = `${baseUrl}/search?collections=${encodeURIComponent(selectedCollectionId)}&bbox=${encodeURIComponent(bboxParam)}&limit=${encodeURIComponent(limitParam)}`;
+              let url = `${baseUrl}/search?collections=${encodeURIComponent(selectedCollectionId)}&bbox=${encodeURIComponent(bboxParam)}&limit=${encodeURIComponent(limitParam)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
               console.log('📅 Datetime filter ref value (onMouseUp):', appliedDatetimeFilterRef.current);
               if (appliedDatetimeFilterRef.current) {
                 url += `&datetime=${encodeURIComponent(appliedDatetimeFilterRef.current)}`;
@@ -1592,8 +1679,10 @@ function SFEOSMap() {
               } else {
                 console.log('⚠️ Datetime filter is EMPTY');
               }
-              console.log('%c🔗 FULL API CALL (onMouseUp):', 'color: blue; font-weight: bold; font-size: 14px;');
+              console.log('%c🔗 BBOX SEARCH (COLLECTION):', 'color: blue; font-weight: bold; font-size: 14px;');
               console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
+              console.log('%c📋 Using fields extension for fast map display', 'color: orange; font-weight: bold;');
+              lastSearchUrlRef.current = url; // Store for download
               window.dispatchEvent(new CustomEvent('hideOverlays'));
               const resp = await fetch(url, { method: 'GET', signal: controller.signal });
               if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
@@ -1633,7 +1722,7 @@ function SFEOSMap() {
               const bboxParam = bbox.map(n => Number(n)).join(',');
               const limitParam = currentItemLimit;
               const baseUrl = stacApiUrlRef.current;
-              let url = `${baseUrl}/search?bbox=${encodeURIComponent(bboxParam)}&limit=${encodeURIComponent(limitParam)}`;
+              let url = `${baseUrl}/search?bbox=${encodeURIComponent(bboxParam)}&limit=${encodeURIComponent(limitParam)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
               console.log('📅 Datetime filter ref value (onMouseUp):', appliedDatetimeFilterRef.current);
               if (appliedDatetimeFilterRef.current) {
                 url += `&datetime=${encodeURIComponent(appliedDatetimeFilterRef.current)}`;
@@ -1641,8 +1730,10 @@ function SFEOSMap() {
               } else {
                 console.log('⚠️ Datetime filter is EMPTY');
               }
-              console.log('%c🔗 FULL API CALL (All Collections onMouseUp):', 'color: blue; font-weight: bold; font-size: 14px;');
+              console.log('%c🔗 BBOX SEARCH (ALL COLLECTIONS):', 'color: blue; font-weight: bold; font-size: 14px;');
               console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
+              console.log('%c📋 Using fields extension for fast map display', 'color: orange; font-weight: bold;');
+              lastSearchUrlRef.current = url; // Store for download
               window.dispatchEvent(new CustomEvent('hideOverlays'));
               const resp = await fetch(url, { method: 'GET', signal: controller.signal });
               if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);

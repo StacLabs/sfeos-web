@@ -484,15 +484,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     
     setIsQueryItemsVisible(newIsExpanded);
     
-    // If expanding and we don't have items yet, trigger a refetch
-    if (newIsExpanded && queryItems.length === 0) {
-      setIsLoadingItems(true);
-      window.dispatchEvent(new CustomEvent('refetchQueryItems', { 
-        detail: { limit: itemLimitRef.current } 
-      }));
-      return;
-    }
-    
     // Only proceed if we're expanding and have items
     if (newIsExpanded && queryItems.length > 0) {
       // Calculate bounding box that encompasses all items
@@ -538,8 +529,9 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     // "All Collections" mode - show simplified interface focused on query items
     return (
       <>
-        {isLoadingItems && <LoadingIndicator message="Loading items..." />}
-        <div className="query-items">
+      {isLoadingItems && <LoadingIndicator message="Loading items..." />}
+      {isLoadingNext && <LoadingIndicator message="Loading next page..." />}
+      <div className="query-items">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               className="stac-expand-btn"
@@ -598,7 +590,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     aria-label="Download feature collection"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDownloadFeatureCollection();
+                      window.dispatchEvent(new CustomEvent('downloadFullResults'));
                     }}
                   >
                     ⬇️
@@ -1075,6 +1067,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   return (
     <>
       {isLoadingItems && <LoadingIndicator message="Loading items..." />}
+      {isLoadingNext && <LoadingIndicator message="Loading next page..." />}
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
@@ -1161,12 +1154,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             onClick={() => {
               const newIsVisible = !isQueryItemsVisible;
               setIsQueryItemsVisible(newIsVisible);
-              if (newIsVisible) {
-                // Only trigger refetch if we're showing the items
-                window.dispatchEvent(new CustomEvent('refetchQueryItems', { 
-                  detail: { limit: itemLimitRef.current } 
-                }));
-              }
             }}
             disabled={isLoadingItems}
           >
@@ -1217,7 +1204,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   aria-label="Download feature collection"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDownloadFeatureCollection();
+                    window.dispatchEvent(new CustomEvent('downloadFullResults'));
                   }}
                 >
                   ⬇️
