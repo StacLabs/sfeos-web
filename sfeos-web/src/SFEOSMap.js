@@ -1502,10 +1502,13 @@ function SFEOSMap() {
           latitude: 20,
           zoom: 2,
           maxZoom: 20,
-          minZoom: 1
+          minZoom: 1,
+          pitch: projection === 'globe' ? 0 : undefined,  // Disable pitch on globe to prevent errors
+          bearing: projection === 'globe' ? 0 : undefined  // Disable bearing on globe to prevent errors
         }}
         projection={projection}
         renderWorldCopies={projection === 'mercator'}
+        maxPitch={projection === 'globe' ? 0 : 60}  // Prevent pitch on globe
         
         // Leave map uncontrolled to avoid animation conflicts
         
@@ -1682,7 +1685,7 @@ function SFEOSMap() {
         // Basic interaction settings
         interactive={true}
         touchZoomRotate={true}
-        dragRotate={!isDrawingBbox}
+        dragRotate={projection === 'mercator' && !isDrawingBbox}  // Disable drag rotation on globe
         dragPan={!isDrawingBbox}
         doubleClickZoom={!isDrawingBbox}
         scrollZoom={true}
