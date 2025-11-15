@@ -1854,6 +1854,12 @@ function SFEOSMap() {
                   <span className="public-link-text">https://earth-search.aws.element84.com/v1</span>
                 </button>
               </li>
+              <li>
+                <button type="button" className="public-link-button" onClick={() => handleSwitchApi('https://stac.openeo.vito.be')} title="Use OpenEO VITO STAC API">
+                  <span className="public-link-icon">🛰️</span>
+                  <span className="public-link-text">https://stac.openeo.vito.be</span>
+                </button>
+              </li>
             </ul>
           </div>
         </div>
