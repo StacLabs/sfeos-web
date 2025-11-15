@@ -339,60 +339,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return () => window.removeEventListener('updateNextLink', handler);
   }, []);
 
-  const handleDownloadFeatureCollection = async () => {
-    try {
-      // Check if we have items to download
-      if (!queryItems || queryItems.length === 0) {
-        alert('No data to download. Please query some items first.');
-        return;
-      }
-
-      // Include complete STAC item data without filtering
-      const features = queryItems.map(item => ({
-        type: 'Feature',
-        id: item.id,
-        geometry: item.geometry,
-        bbox: item.bbox,
-        properties: item.properties || {},
-        assets: item.assets || {},
-        links: item.links || [],
-        collection: item.collection,
-        stac_version: item.stac_version,
-        stac_extensions: item.stac_extensions
-      }));
-
-      const geojsonData = {
-        type: 'FeatureCollection',
-        features: features,
-        numberReturned: features.length,
-        numberMatched: numberMatched || features.length
-      };
-
-      // Create filename
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-      const collectionName = collection ? collection.id.replace(/[^a-zA-Z0-9-_]/g, '_') : 'all_collections';
-      const filename = `${collectionName}_items_${timestamp}.geojson`;
-
-      // Create and download the file
-      const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { type: 'application/geo+json' });
-      const url_blob = URL.createObjectURL(blob);
-
-      const link = document.createElement('a');
-      link.href = url_blob;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      URL.revokeObjectURL(url_blob);
-
-      alert(`Downloaded ${features.length} items to ${filename}`);
-
-    } catch (error) {
-      alert(`Failed to download feature collection: ${error.message}`);
-    }
-  };
-
   const buildItemsUrl = (baseUrl, collectionId, limit, datetimeFilter) => {
     let url = `${baseUrl}/collections/${collectionId}/items?limit=${limit}`;
     if (datetimeFilter) {
@@ -456,15 +402,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     
     setIsQueryItemsVisible(newIsExpanded);
     
-    // If expanding and we don't have items yet, trigger a refetch
-    if (newIsExpanded && queryItems.length === 0) {
-      setIsLoadingItems(true);
-      window.dispatchEvent(new CustomEvent('refetchQueryItems', { 
-        detail: { limit: itemLimitRef.current } 
-      }));
-      return;
-    }
-    
     // Only proceed if we're expanding and have items
     if (newIsExpanded && queryItems.length > 0) {
       // Calculate bounding box that encompasses all items
@@ -510,8 +447,9 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     // "All Collections" mode - show simplified interface focused on query items
     return (
       <>
-        {isLoadingItems && <LoadingIndicator message="Loading items..." />}
-        <div className="query-items">
+      {isLoadingItems && <LoadingIndicator message="Loading items..." />}
+      {isLoadingNext && <LoadingIndicator message="Loading next page..." />}
+      <div className="query-items">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               className="stac-expand-btn"
@@ -570,7 +508,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     aria-label="Download feature collection"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDownloadFeatureCollection();
+                      window.dispatchEvent(new CustomEvent('downloadFullResults'));
                     }}
                   >
                     ⬇️
@@ -1016,6 +954,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   return (
     <>
       {isLoadingItems && <LoadingIndicator message="Loading items..." />}
+      {isLoadingNext && <LoadingIndicator message="Loading next page..." />}
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
@@ -1102,12 +1041,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             onClick={() => {
               const newIsVisible = !isQueryItemsVisible;
               setIsQueryItemsVisible(newIsVisible);
-              if (newIsVisible) {
-                // Only trigger refetch if we're showing the items
-                window.dispatchEvent(new CustomEvent('refetchQueryItems', { 
-                  detail: { limit: itemLimitRef.current } 
-                }));
-              }
             }}
             disabled={isLoadingItems}
           >
@@ -1158,7 +1091,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   aria-label="Download feature collection"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDownloadFeatureCollection();
+                    window.dispatchEvent(new CustomEvent('downloadFullResults'));
                   }}
                 >
                   ⬇️
