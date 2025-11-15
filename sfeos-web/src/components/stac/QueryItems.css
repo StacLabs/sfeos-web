@@ -158,8 +158,10 @@
 }
 
 .datetime-btn {
-  padding: 4px 8px;
-  font-size: 0.8rem;
+  padding: 3px 8px;
+  font-size: 0.52rem;
+  line-height: 1.1;
+  font-weight: 600;
 }
 
 .bbox-btn:hover,
