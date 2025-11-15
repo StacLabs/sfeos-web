@@ -59,6 +59,7 @@ function SFEOSMap() {
   const bboxLayers = useRef(new Set()); // Track bounding box layer IDs
   const stacApiUrlRef = useRef(stacApiUrl);
   const appliedDatetimeFilterRef = useRef(''); // Track datetime filter from StacCollectionDetails
+  const appliedCloudCoverFilterRef = useRef(''); // Track cloud cover filter from StacCollectionDetails
   const searchControllerRef = useRef(null); // AbortController for in-flight searches
   const latestSearchIdRef = useRef(0); // Monotonic ID to ignore stale results
   const isAnimatingRef = useRef(false); // Prevent overlapping map animations
@@ -349,6 +350,22 @@ function SFEOSMap() {
     window.addEventListener('datetimeFilterChanged', handleDatetimeFilterChanged);
     return () => {
       window.removeEventListener('datetimeFilterChanged', handleDatetimeFilterChanged);
+    };
+  }, []);
+
+  // Listen for cloud cover filter changes from StacCollectionDetails
+  useEffect(() => {
+    const handleCloudCoverFilterChanged = (event) => {
+      const cloudCoverFilter = event?.detail?.cloudCoverFilter || '';
+      appliedCloudCoverFilterRef.current = cloudCoverFilter;
+      console.log('☁️ Cloud cover filter event received in SFEOSMap');
+      console.log('   Filter value:', cloudCoverFilter);
+      console.log('   Ref now contains:', appliedCloudCoverFilterRef.current);
+    };
+
+    window.addEventListener('cloudCoverFilterChanged', handleCloudCoverFilterChanged);
+    return () => {
+      window.removeEventListener('cloudCoverFilterChanged', handleCloudCoverFilterChanged);
     };
   }, []);
 
