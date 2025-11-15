@@ -25,6 +25,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   const [cloudCoverMax, setCloudCoverMax] = useState(100);
   const [appliedCloudCoverFilter, setAppliedCloudCoverFilter] = useState('');
   const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [hasPerformedSearch, setHasPerformedSearch] = useState(false);
   const prevCollectionId = useRef(null);
   const stacApiUrlRef = useRef(stacApiUrl);
   const itemLimitRef = useRef(itemLimit);
@@ -133,6 +134,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       setIsBoundingBoxVisible(false);
       setNumberReturned(null);
       setNumberMatched(null);
+      setHasPerformedSearch(false);
 
       // Clear any map overlays/geometries related to the previous collection
       try {
@@ -203,6 +205,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       setNumberMatched(null);
       setItemLimit(10);
       setItemLimitDisplay('10');
+      setHasPerformedSearch(false);
     };
     window.addEventListener('resetStacCollectionDetails', handler);
     return () => window.removeEventListener('resetStacCollectionDetails', handler);
@@ -309,6 +312,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         // Always use the items as-is since they should already be processed
         const processedItems = items;
         setQueryItems(processedItems);
+        setHasPerformedSearch(true);
       }
       
       // Always hide loading indicator when we get results
@@ -717,7 +721,13 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   ))}
                 </ul>
               ) : (
-                <p>No items found across all collections.</p>
+                hasPerformedSearch ? (
+                  <p>No items found across all collections.</p>
+                ) : (
+                  <p style={{ fontStyle: 'italic', color: '#888', margin: '10px 0' }}>
+                    Click the 🔎 search button to find items across all collections.
+                  </p>
+                )
               )}
             {isFilterOpen && (
               <div className="datetime-filter-box">
@@ -1331,7 +1341,13 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 ))}
               </ul>
             ) : (
-              <p>No items found for this collection.</p>
+              hasPerformedSearch ? (
+                <p>No items found for this collection.</p>
+              ) : (
+                <p style={{ fontStyle: 'italic', color: '#888', margin: '10px 0' }}>
+                  Click the 🔎 search button to find items in this collection.
+                </p>
+              )
             )}
           </div>
         )}
