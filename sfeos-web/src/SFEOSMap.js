@@ -1222,6 +1222,8 @@ function SFEOSMap() {
     const hideMapThumbnailHandler = () => {
       try {
         setMapThumbnail({ geometry: null, url: null, title: '', type: null });
+        // Also clear popup thumbnail
+        setThumbnail({ url: null, title: '', type: null });
       } catch (e) {
         console.error('Error handling hideMapThumbnail:', e);
       }

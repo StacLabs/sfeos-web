@@ -69,6 +69,60 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     }
   }, [onShowItemsOnMap]);
 
+  // Helper function to fetch full item details for thumbnail display
+  const fetchFullItemForThumbnail = async (item) => {
+    if (!item.collection) {
+      console.warn('Cannot fetch thumbnail: no collection provided');
+      return;
+    }
+
+    try {
+      const baseUrl = stacApiUrl;
+      const itemUrl = `${baseUrl}/collections/${encodeURIComponent(item.collection)}/items/${encodeURIComponent(item.id)}`;
+      
+      console.log('🖼️ Fetching full item for thumbnail:', item.id);
+      const resp = await fetch(itemUrl);
+      
+      if (resp.ok) {
+        const fullItem = await resp.json();
+        
+        // Extract thumbnail from assets
+        const thumbnail = extractThumbnail(fullItem);
+        
+        if (thumbnail.thumbnailUrl) {
+          // Dispatch showItemThumbnail event for popup overlay
+          window.dispatchEvent(new CustomEvent('showItemThumbnail', {
+            detail: {
+              url: thumbnail.thumbnailUrl,
+              title: item.title || item.id,
+              type: thumbnail.thumbnailType
+            }
+          }));
+          
+          // Also dispatch showMapThumbnail event for map overlay
+          if (fullItem.geometry) {
+            window.dispatchEvent(new CustomEvent('showMapThumbnail', {
+              detail: {
+                geometry: fullItem.geometry,
+                url: thumbnail.thumbnailUrl,
+                title: item.title || item.id,
+                type: thumbnail.thumbnailType
+              }
+            }));
+          }
+          
+          console.log('🖼️ Thumbnail displayed for:', item.id);
+        } else {
+          console.log('🖼️ No thumbnail found for:', item.id);
+        }
+      } else {
+        console.warn(`Failed to fetch full item for thumbnail (${resp.status}):`, item.id);
+      }
+    } catch (error) {
+      console.error('Error fetching full item for thumbnail:', error);
+    }
+  };
+
   // Helper function to extract thumbnail from item
   const extractThumbnail = (item) => {
     let thumbnailUrl = null;
@@ -999,8 +1053,23 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     
     console.log('👁 Eye button clicked for item:', item.id);
     
-    // Make eye button behave like clicking the item name - zoom to item and show only that item
-    handleItemClick(item);
+    // Check if this item's thumbnail is already visible
+    if (visibleThumbnailItemId === item.id) {
+      // Hide the thumbnail if it's already visible
+      console.log('🖼️ Hiding thumbnail for:', item.id);
+      window.dispatchEvent(new CustomEvent('hideMapThumbnail'));
+      setVisibleThumbnailItemId(null);
+    } else {
+      // Show the thumbnail if it's not visible
+      console.log('🖼️ Showing thumbnail for:', item.id);
+      handleItemClick(item);
+      
+      // Fetch full item details to get thumbnail assets
+      fetchFullItemForThumbnail(item);
+      
+      // Set this item as having visible thumbnail
+      setVisibleThumbnailItemId(item.id);
+    }
   };
 
   return (
