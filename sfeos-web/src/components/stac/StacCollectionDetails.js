@@ -18,15 +18,110 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   const [numberMatched, setNumberMatched] = useState(null);
   const [visibleThumbnailItemId, setVisibleThumbnailItemId] = useState(null);
   const [itemLimitDisplay, setItemLimitDisplay] = useState(itemLimit.toString());
-  const [isDatetimePickerOpen, setIsDatetimePickerOpen] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [appliedDatetimeFilter, setAppliedDatetimeFilter] = useState('');
+  const [cloudCoverMax, setCloudCoverMax] = useState(100);
+  const [appliedCloudCoverFilter, setAppliedCloudCoverFilter] = useState('');
   const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [isLoadingItemDetails, setIsLoadingItemDetails] = useState(false);
+  const [hasPerformedSearch, setHasPerformedSearch] = useState(false);
   const prevCollectionId = useRef(null);
   const stacApiUrlRef = useRef(stacApiUrl);
   const itemLimitRef = useRef(itemLimit);
   const appliedDatetimeFilterRef = useRef('');
+  const appliedCloudCoverFilterRef = useRef('');
+
+  // Define handleItemClick early to avoid use-before-define and conditional hook issues
+  const handleItemClick = useCallback((item) => {
+    console.log('Item clicked:', item);
+    // Close any open overlays when selecting an item
+    try {
+      window.dispatchEvent(new CustomEvent('hideOverlays'));
+      window.dispatchEvent(new CustomEvent('hideMapThumbnail'));
+    } catch (err) {
+      console.warn('Failed to dispatch hideOverlays on item click:', err);
+    }
+    setSelectedItemId(item.id);
+    setVisibleThumbnailItemId(null);
+    
+    // Show only this item on the map
+    if (onShowItemsOnMap) {
+      console.log('Showing single item on map:', item);
+      onShowItemsOnMap([item]);
+    }
+    
+    // Zoom to the item's bbox if available with better zoom level
+    if (item.bbox) {
+      const zoomEvent = new CustomEvent('zoomToBbox', { 
+        detail: { 
+          bbox: item.bbox,
+          options: {
+            padding: 50,
+            maxZoom: 18,
+            essential: true
+          }
+        } 
+      });
+      console.log('Zooming to item bbox:', item.bbox);
+      window.dispatchEvent(zoomEvent);
+    }
+  }, [onShowItemsOnMap]);
+
+  // Helper function to fetch full item details for thumbnail display
+  const fetchFullItemForThumbnail = async (item) => {
+    if (!item.collection) {
+      console.warn('Cannot fetch thumbnail: no collection provided');
+      return;
+    }
+
+    try {
+      const baseUrl = stacApiUrl;
+      const itemUrl = `${baseUrl}/collections/${encodeURIComponent(item.collection)}/items/${encodeURIComponent(item.id)}`;
+      
+      console.log('🖼️ Fetching full item for thumbnail:', item.id);
+      const resp = await fetch(itemUrl);
+      
+      if (resp.ok) {
+        const fullItem = await resp.json();
+        
+        // Extract thumbnail from assets
+        const thumbnail = extractThumbnail(fullItem);
+        
+        if (thumbnail.thumbnailUrl) {
+          // Dispatch showItemThumbnail event for popup overlay
+          window.dispatchEvent(new CustomEvent('showItemThumbnail', {
+            detail: {
+              url: thumbnail.thumbnailUrl,
+              title: item.title || item.id,
+              type: thumbnail.thumbnailType
+            }
+          }));
+          
+          // Also dispatch showMapThumbnail event for map overlay
+          if (fullItem.geometry) {
+            window.dispatchEvent(new CustomEvent('showMapThumbnail', {
+              detail: {
+                geometry: fullItem.geometry,
+                url: thumbnail.thumbnailUrl,
+                title: item.title || item.id,
+                type: thumbnail.thumbnailType
+              }
+            }));
+          }
+          
+          console.log('🖼️ Thumbnail displayed for:', item.id);
+        } else {
+          console.log('🖼️ No thumbnail found for:', item.id);
+        }
+      } else {
+        console.warn(`Failed to fetch full item for thumbnail (${resp.status}):`, item.id);
+      }
+    } catch (error) {
+      console.error('Error fetching full item for thumbnail:', error);
+    }
+  };
 
   // Helper function to extract thumbnail from item
   const extractThumbnail = (item) => {
@@ -130,6 +225,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       setIsBoundingBoxVisible(false);
       setNumberReturned(null);
       setNumberMatched(null);
+      setHasPerformedSearch(false);
 
       // Clear any map overlays/geometries related to the previous collection
       try {
@@ -167,7 +263,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         } catch {}
         return merged;
       });
-      if (data.numberReturned != null) setNumberReturned(prev => prev + (data.numberReturned || 0));
+      // Update numberReturned to reflect total items loaded so far
+      setNumberReturned(prev => prev + (data.numberReturned || newItems.length));
       if (data.numberMatched != null) setNumberMatched(data.numberMatched);
       try {
         const next = Array.isArray(data.links) ? data.links.find(l => l.rel === 'next' && l.href) : null;
@@ -200,6 +297,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       setNumberMatched(null);
       setItemLimit(10);
       setItemLimitDisplay('10');
+      setHasPerformedSearch(false);
     };
     window.addEventListener('resetStacCollectionDetails', handler);
     return () => window.removeEventListener('resetStacCollectionDetails', handler);
@@ -216,16 +314,20 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         
         const baseUrl = stacApiUrlRef.current || process.env.REACT_APP_STAC_API_BASE_URL || 'http://localhost:8080';
         const datetimeFilter = appliedDatetimeFilterRef.current;
+        const cloudCoverFilter = appliedCloudCoverFilterRef.current;
         
         let url;
         if (collection && collection.id) {
           // Regular collection-specific search
-          url = buildItemsUrl(baseUrl, collection.id, lim, datetimeFilter);
+          url = buildItemsUrl(baseUrl, collection.id, lim, datetimeFilter, cloudCoverFilter);
         } else {
           // All Collections search
           url = `${baseUrl}/search?limit=${lim}`;
           if (datetimeFilter) {
             url += `&datetime=${encodeURIComponent(datetimeFilter)}`;
+          }
+          if (cloudCoverFilter) {
+            url += `&query=${encodeURIComponent(cloudCoverFilter)}`;
           }
         }
         
@@ -274,7 +376,16 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return () => window.removeEventListener('datetimeFilterChanged', handler);
   }, []);
 
-  // Listen for showItemsOnMap event to update the items list and hide loading indicator
+  // Listen for cloudCoverFilterChanged event to show loading indicator
+  useEffect(() => {
+    const handler = () => {
+      setIsLoadingItems(true);
+    };
+    window.addEventListener('cloudCoverFilterChanged', handler);
+    return () => window.removeEventListener('cloudCoverFilterChanged', handler);
+  }, []);
+
+  // Listen for showItemDetails event to update the items list and hide loading indicator
   useEffect(() => {
     const handler = (event) => {
       const numberReturned = event?.detail?.numberReturned;
@@ -293,6 +404,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         // Always use the items as-is since they should already be processed
         const processedItems = items;
         setQueryItems(processedItems);
+        setHasPerformedSearch(true);
       }
       
       // Always hide loading indicator when we get results
@@ -307,24 +419,41 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     const handler = (event) => {
       const itemId = event?.detail?.itemId;
       if (itemId) {
-        setSelectedItemId(itemId);
-        setVisibleThumbnailItemId(null);
-        
-        // Scroll the selected item into view
-        setTimeout(() => {
-          const selectedElement = document.querySelector(`[data-item-id="${itemId}"]`);
-          if (selectedElement) {
-            selectedElement.scrollIntoView({ 
-              behavior: 'smooth', 
-              block: 'nearest',
-              inline: 'nearest' 
-            });
-          }
-        }, 100); // Small delay to ensure DOM updates
+        // Find the item in queryItems by ID
+        const selectedItem = queryItems.find(item => item.id === itemId);
+        if (selectedItem) {
+          // Make map clicks behave like clicking item names - zoom and show only that item
+          handleItemClick(selectedItem);
+        } else {
+          // Fallback: just set selected ID and scroll if item not found
+          setSelectedItemId(itemId);
+          setVisibleThumbnailItemId(null);
+          
+          // Scroll the selected item into view
+          setTimeout(() => {
+            const selectedElement = document.querySelector(`[data-item-id="${itemId}"]`);
+            if (selectedElement) {
+              selectedElement.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'nearest',
+                inline: 'nearest' 
+              });
+            }
+          }, 100); // Small delay to ensure DOM updates
+        }
       }
     };
     window.addEventListener('selectItem', handler);
     return () => window.removeEventListener('selectItem', handler);
+  }, [queryItems, handleItemClick]);
+
+  // Listen for itemDetailsLoaded event to clear loading state
+  useEffect(() => {
+    const handler = () => {
+      setIsLoadingItemDetails(false);
+    };
+    window.addEventListener('itemDetailsLoaded', handler);
+    return () => window.removeEventListener('itemDetailsLoaded', handler);
   }, []);
 
   // Listen for updateNextLink event from bbox searches
@@ -339,10 +468,13 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return () => window.removeEventListener('updateNextLink', handler);
   }, []);
 
-  const buildItemsUrl = (baseUrl, collectionId, limit, datetimeFilter) => {
+  const buildItemsUrl = (baseUrl, collectionId, limit, datetimeFilter, cloudCoverFilter) => {
     let url = `${baseUrl}/collections/${collectionId}/items?limit=${limit}`;
     if (datetimeFilter) {
       url += `&datetime=${encodeURIComponent(datetimeFilter)}`;
+    }
+    if (cloudCoverFilter) {
+      url += `&query=${encodeURIComponent(cloudCoverFilter)}`;
     }
     return url;
   };
@@ -367,6 +499,15 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       return `1800-01-01T00:00:00Z/${formattedEnd}`;
     }
     return '';
+  };
+
+  // Helper function to build cloud cover filter query string
+  const buildCloudCoverFilter = (maxCloudCover) => {
+    if (maxCloudCover === null || maxCloudCover === undefined || maxCloudCover === 100) {
+      return '';
+    }
+    // Return STAC query format for cloud cover - direct property filter
+    return JSON.stringify({ 'eo:cloud_cover': { 'lte': maxCloudCover } });
   };
 
   // Helper function to extract and set search result counts from API response
@@ -577,15 +718,15 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 </button>
                 <button
                   type="button"
-                  className={`datetime-btn ${appliedDatetimeFilter ? 'datetime-active' : 'datetime-inactive'}`}
-                  title={appliedDatetimeFilter ? `Filter active: ${appliedDatetimeFilter}` : "Filter by datetime"}
-                  aria-label={appliedDatetimeFilter ? `Filter active: ${appliedDatetimeFilter}` : "Filter by datetime"}
+                  className={`datetime-btn ${appliedDatetimeFilter || appliedCloudCoverFilter ? 'datetime-active' : 'datetime-inactive'}`}
+                  title="Open filters (datetime & cloud cover)"
+                  aria-label="Open filters"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setIsDatetimePickerOpen(!isDatetimePickerOpen);
+                    setIsFilterOpen(!isFilterOpen);
                   }}
                 >
-                  📅
+                  Filter
                 </button>
               </div>
               {queryItems.length > 0 ? (
@@ -613,8 +754,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                         className="details-btn"
                         title="Show item details"
                         aria-label="Show item details"
+                        disabled={isLoadingItemDetails}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (isLoadingItemDetails) return;
+                          setIsLoadingItemDetails(true); // Set loading immediately
                           const detailsEvent = new CustomEvent('showItemDetails', {
                             detail: {
                               id: item.id,
@@ -635,80 +779,117 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   ))}
                 </ul>
               ) : (
-                <p>No items found across all collections.</p>
+                hasPerformedSearch ? (
+                  <p>No items found across all collections.</p>
+                ) : (
+                  <p style={{ fontStyle: 'italic', color: '#888', margin: '10px 0' }}>
+                    Click the 🔎 search button to find items across all collections.
+                  </p>
+                )
               )}
-            </div>
-          )}
-        </div>
-        {isDatetimePickerOpen && (
-          <div className="datetime-filter-box">
-            <div className="datetime-filter-header">
-              <h3>Filter by Date</h3>
-              <button 
-                className="datetime-filter-close"
-                onClick={() => setIsDatetimePickerOpen(false)}
-                aria-label="Close datetime filter"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="datetime-filter-content">
-              <div className="datetime-filter-group">
-                <label htmlFor="start-date">Start Date:</label>
-                <input
-                  id="start-date"
-                  type="datetime-local"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
+            {isFilterOpen && (
+              <div className="datetime-filter-box">
+                <div className="datetime-filter-header">
+                  <h3>Filters</h3>
+                  <button 
+                    className="datetime-filter-close"
+                    onClick={() => setIsFilterOpen(false)}
+                    aria-label="Close filters"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="datetime-filter-content">
+                  {/* Datetime Filter Section */}
+                  <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #ddd' }}>
+                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
+                    <div className="datetime-filter-group">
+                      <label htmlFor="start-date">Start Date:</label>
+                      <input
+                        id="start-date"
+                        type="datetime-local"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        style={{ maxWidth: '200px' }}
+                      />
+                    </div>
+                    <div className="datetime-filter-group" style={{ marginTop: '8px' }}>
+                      <label htmlFor="end-date">End Date:</label>
+                      <input
+                        id="end-date"
+                        type="datetime-local"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        style={{ maxWidth: '200px' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Cloud Cover Filter Section */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <h4 style={{ margin: '0 0 2px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
+                    <div className="datetime-filter-group">
+                      <label htmlFor="cloud-cover-slider">Max Cloud Cover: {cloudCoverMax}%</label>
+                      <input
+                        id="cloud-cover-slider"
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={cloudCoverMax}
+                        onChange={(e) => setCloudCoverMax(Number(e.target.value))}
+                        style={{ width: '200px' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="datetime-filter-buttons">
+                    <button
+                      type="button"
+                      className="datetime-apply-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const datetimeFilter = buildDatetimeFilter(startDate, endDate);
+                        const cloudCoverFilter = buildCloudCoverFilter(cloudCoverMax);
+                        console.log('Filters applied:', { datetimeFilter, cloudCoverFilter });
+                        setAppliedDatetimeFilter(datetimeFilter);
+                        setAppliedCloudCoverFilter(cloudCoverFilter);
+                        appliedCloudCoverFilterRef.current = cloudCoverFilter;
+                        setIsFilterOpen(false);
+                        window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter } }));
+                        window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter } }));
+                        window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                      }}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      className="datetime-clear-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setStartDate('');
+                        setEndDate('');
+                        setCloudCoverMax(100);
+                        setAppliedDatetimeFilter('');
+                        setAppliedCloudCoverFilter('');
+                        appliedCloudCoverFilterRef.current = '';
+                        window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter: '' } }));
+                        window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter: '' } }));
+                        window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                      }}
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="datetime-filter-group">
-                <label htmlFor="end-date">End Date:</label>
-                <input
-                  id="end-date"
-                  type="datetime-local"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
-              </div>
-              <div className="datetime-filter-buttons">
-                <button
-                  type="button"
-                  className="datetime-apply-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const datetimeFilter = buildDatetimeFilter(startDate, endDate);
-                    console.log('Datetime filter applied:', { startDate, endDate, datetimeFilter });
-                    setAppliedDatetimeFilter(datetimeFilter);
-                    setIsDatetimePickerOpen(false);
-                    window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter } }));
-                    window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
-                  }}
-                >
-                  Apply
-                </button>
-                <button
-                  type="button"
-                  className="datetime-clear-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setStartDate('');
-                    setEndDate('');
-                    setAppliedDatetimeFilter('');
-                    // Dispatch event so SFEOSMap knows the datetime filter was cleared
-                    window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter: '' } }));
-                    // Trigger refetch without datetime filter
-                    window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
-                  }}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
+            )}
           </div>
         )}
-      </>
-    );
+      </div>
+    </>
+  );
   }
 
   // Check if this is a STAC Catalog instead of a Collection
@@ -867,87 +1048,27 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     }
   };
 
-  function handleItemClick(item) {
-    console.log('Item clicked:', item);
-    // Close any open overlays when selecting an item
-    try {
-      window.dispatchEvent(new CustomEvent('hideOverlays'));
-      window.dispatchEvent(new CustomEvent('hideMapThumbnail'));
-    } catch (err) {
-      console.warn('Failed to dispatch hideOverlays on item click:', err);
-    }
-    setSelectedItemId(item.id);
-    setVisibleThumbnailItemId(null);
-    
-    // Show only this item on the map
-    if (onShowItemsOnMap) {
-      console.log('Showing single item on map:', item);
-      onShowItemsOnMap([item]);
-    }
-    
-    // Zoom to the item's bbox if available with better zoom level
-    if (item.bbox) {
-      const zoomEvent = new CustomEvent('zoomToBbox', { 
-        detail: { 
-          bbox: item.bbox,
-          options: {
-            padding: 50,
-            maxZoom: 18,
-            essential: true
-          }
-        } 
-      });
-      console.log('Zooming to item bbox:', item.bbox);
-      window.dispatchEvent(zoomEvent);
-    }
-  }
-
   const handleEyeButtonClick = (e, item) => {
     e.stopPropagation();
     
     console.log('👁 Eye button clicked for item:', item.id);
     
-    // Toggle thumbnail visibility for this item
+    // Check if this item's thumbnail is already visible
     if (visibleThumbnailItemId === item.id) {
-      // Hide thumbnail
-      setVisibleThumbnailItemId(null);
-      window.dispatchEvent(new CustomEvent('hideOverlays'));
+      // Hide the thumbnail if it's already visible
+      console.log('🖼️ Hiding thumbnail for:', item.id);
       window.dispatchEvent(new CustomEvent('hideMapThumbnail'));
-      // Show all items again
-      if (onShowItemsOnMap) {
-        console.log('Showing all query items on map');
-        onShowItemsOnMap(queryItems);
-      }
+      setVisibleThumbnailItemId(null);
     } else {
-      // Show thumbnail
+      // Show the thumbnail if it's not visible
+      console.log('🖼️ Showing thumbnail for:', item.id);
+      handleItemClick(item);
+      
+      // Fetch full item details to get thumbnail assets
+      fetchFullItemForThumbnail(item);
+      
+      // Set this item as having visible thumbnail
       setVisibleThumbnailItemId(item.id);
-      const { thumbnailUrl, thumbnailType } = extractThumbnail(item);
-      
-      // Clear the item geometries from the map to hide the red square
-      window.dispatchEvent(new CustomEvent('clearItemGeometries'));
-      
-      // Dispatch the thumbnail event - this will show the overlay
-      const thumbEvent = new CustomEvent('showItemThumbnail', {
-        detail: {
-          url: thumbnailUrl || null,
-          title: item.title || item.id,
-          type: thumbnailType || null
-        }
-      });
-      window.dispatchEvent(thumbEvent);
-
-      // Show thumbnail on map if available and has geometry
-      if (item.thumbnailUrl && item.geometry) {
-        const mapThumbEvent = new CustomEvent('showMapThumbnail', {
-          detail: {
-            geometry: item.geometry,
-            url: item.thumbnailUrl,
-            title: item.title || item.id,
-            type: item.thumbnailType || null
-          }
-        });
-        window.dispatchEvent(mapThumbEvent);
-      }
     }
   };
 
@@ -955,6 +1076,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     <>
       {isLoadingItems && <LoadingIndicator message="Loading items..." />}
       {isLoadingNext && <LoadingIndicator message="Loading next page..." />}
+      {isLoadingItemDetails && <LoadingIndicator message="Loading item details..." />}
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
@@ -1044,7 +1166,14 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             }}
             disabled={isLoadingItems}
           >
-            <span className="expand-label">Query Items</span>
+            <span className="expand-label">
+              Query Items
+              {(numberReturned !== null || numberMatched !== null) && (
+                <span className="query-items-count">
+                  ({numberReturned !== null ? numberReturned : '?'}/{numberMatched !== null ? numberMatched : 'Not provided'})
+                </span>
+              )}
+            </span>
             <span className="expand-arrow">{isQueryItemsVisible ? '▼' : '▶'}</span>
           </button>
         </div>
@@ -1160,15 +1289,15 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
               </button>
               <button
                 type="button"
-                className={`datetime-btn ${appliedDatetimeFilter ? 'datetime-active' : 'datetime-inactive'}`}
-                title={appliedDatetimeFilter ? `Filter active: ${appliedDatetimeFilter}` : "Filter by datetime"}
-                aria-label={appliedDatetimeFilter ? `Filter active: ${appliedDatetimeFilter}` : "Filter by datetime"}
+                className={`datetime-btn ${appliedDatetimeFilter || appliedCloudCoverFilter ? 'datetime-active' : 'datetime-inactive'}`}
+                title="Open filters (datetime & cloud cover)"
+                aria-label="Open filters"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsDatetimePickerOpen(!isDatetimePickerOpen);
+                  setIsFilterOpen(!isFilterOpen);
                 }}
               >
-                📅
+                Filter
               </button>
             </div>
             {queryItems.length > 0 ? (
@@ -1194,10 +1323,14 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     </button>
                     <button
                       className="details-btn"
-                      title="Show item details"
-                      aria-label="Show item details"
+                      title="Zoom to item and show details"
+                      aria-label="Zoom to item and show details"
+                      disabled={isLoadingItemDetails}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (isLoadingItemDetails) return; // Prevent multiple clicks
+                        setIsLoadingItemDetails(true); // Set loading immediately
+                        handleItemClick(item);
                         const detailsEvent = new CustomEvent('showItemDetails', {
                           detail: {
                             id: item.id,
@@ -1218,78 +1351,115 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 ))}
               </ul>
             ) : (
-              <p>No items found for this collection.</p>
+              hasPerformedSearch ? (
+                <p>No items found for this collection.</p>
+              ) : (
+                <p style={{ fontStyle: 'italic', color: '#888', margin: '10px 0' }}>
+                  Click the 🔎 search button to find items in this collection.
+                </p>
+              )
             )}
           </div>
         )}
+        {isFilterOpen && (
+          <div className="datetime-filter-box">
+            <div className="datetime-filter-header">
+              <h3>Filters</h3>
+              <button 
+                className="datetime-filter-close"
+                onClick={() => setIsFilterOpen(false)}
+                aria-label="Close filters"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="datetime-filter-content">
+              {/* Datetime Filter Section */}
+              <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #ddd' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
+                <div className="datetime-filter-group">
+                  <label htmlFor="start-date">Start Date:</label>
+                  <input
+                    id="start-date"
+                    type="datetime-local"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    style={{ maxWidth: '200px' }}
+                  />
+                </div>
+                <div className="datetime-filter-group" style={{ marginTop: '8px' }}>
+                  <label htmlFor="end-date">End Date:</label>
+                  <input
+                    id="end-date"
+                    type="datetime-local"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    style={{ maxWidth: '200px' }}
+                  />
+                </div>
+              </div>
+
+              {/* Cloud Cover Filter Section */}
+              <div style={{ marginBottom: '10px' }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
+                <div className="datetime-filter-group">
+                  <label htmlFor="cloud-cover-slider">Max Cloud Cover: {cloudCoverMax}%</label>
+                  <input
+                    id="cloud-cover-slider"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={cloudCoverMax}
+                    onChange={(e) => setCloudCoverMax(Number(e.target.value))}
+                    style={{ width: '200px' }}
+                  />
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="datetime-filter-buttons">
+                <button
+                  type="button"
+                  className="datetime-apply-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const datetimeFilter = buildDatetimeFilter(startDate, endDate);
+                    const cloudCoverFilter = buildCloudCoverFilter(cloudCoverMax);
+                    console.log('Filters applied:', { datetimeFilter, cloudCoverFilter });
+                    setAppliedDatetimeFilter(datetimeFilter);
+                    setAppliedCloudCoverFilter(cloudCoverFilter);
+                    appliedCloudCoverFilterRef.current = cloudCoverFilter;
+                    setIsFilterOpen(false);
+                    window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter } }));
+                    window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter } }));
+                    window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                  }}
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  className="datetime-clear-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStartDate('');
+                    setEndDate('');
+                    setCloudCoverMax(100);
+                    setAppliedDatetimeFilter('');
+                    setAppliedCloudCoverFilter('');
+                    appliedCloudCoverFilterRef.current = '';
+                    window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter: '' } }));
+                    window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter: '' } }));
+                    window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                  }}
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      {isDatetimePickerOpen && (
-        <div className="datetime-filter-box">
-          <div className="datetime-filter-header">
-            <h3>Filter by Date</h3>
-            <button 
-              className="datetime-filter-close"
-              onClick={() => setIsDatetimePickerOpen(false)}
-              aria-label="Close datetime filter"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="datetime-filter-content">
-            <div className="datetime-filter-group">
-              <label htmlFor="start-date">Start Date:</label>
-              <input
-                id="start-date"
-                type="datetime-local"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-            <div className="datetime-filter-group">
-              <label htmlFor="end-date">End Date:</label>
-              <input
-                id="end-date"
-                type="datetime-local"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-            <div className="datetime-filter-buttons">
-              <button
-                type="button"
-                className="datetime-apply-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const datetimeFilter = buildDatetimeFilter(startDate, endDate);
-                  console.log('Datetime filter applied:', { startDate, endDate, datetimeFilter });
-                  setAppliedDatetimeFilter(datetimeFilter);
-                  setIsDatetimePickerOpen(false);
-                  window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter } }));
-                  window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
-                }}
-              >
-                Apply
-              </button>
-              <button
-                type="button"
-                className="datetime-clear-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setStartDate('');
-                  setEndDate('');
-                  setAppliedDatetimeFilter('');
-                  // Dispatch event so SFEOSMap knows the datetime filter was cleared
-                  window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter: '' } }));
-                  // Trigger refetch without datetime filter
-                  window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
-                }}
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
