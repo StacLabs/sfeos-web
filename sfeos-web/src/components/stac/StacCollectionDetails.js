@@ -25,12 +25,49 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   const [cloudCoverMax, setCloudCoverMax] = useState(100);
   const [appliedCloudCoverFilter, setAppliedCloudCoverFilter] = useState('');
   const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [isLoadingItemDetails, setIsLoadingItemDetails] = useState(false);
   const [hasPerformedSearch, setHasPerformedSearch] = useState(false);
   const prevCollectionId = useRef(null);
   const stacApiUrlRef = useRef(stacApiUrl);
   const itemLimitRef = useRef(itemLimit);
   const appliedDatetimeFilterRef = useRef('');
   const appliedCloudCoverFilterRef = useRef('');
+
+  // Define handleItemClick early to avoid use-before-define and conditional hook issues
+  const handleItemClick = useCallback((item) => {
+    console.log('Item clicked:', item);
+    // Close any open overlays when selecting an item
+    try {
+      window.dispatchEvent(new CustomEvent('hideOverlays'));
+      window.dispatchEvent(new CustomEvent('hideMapThumbnail'));
+    } catch (err) {
+      console.warn('Failed to dispatch hideOverlays on item click:', err);
+    }
+    setSelectedItemId(item.id);
+    setVisibleThumbnailItemId(null);
+    
+    // Show only this item on the map
+    if (onShowItemsOnMap) {
+      console.log('Showing single item on map:', item);
+      onShowItemsOnMap([item]);
+    }
+    
+    // Zoom to the item's bbox if available with better zoom level
+    if (item.bbox) {
+      const zoomEvent = new CustomEvent('zoomToBbox', { 
+        detail: { 
+          bbox: item.bbox,
+          options: {
+            padding: 50,
+            maxZoom: 18,
+            essential: true
+          }
+        } 
+      });
+      console.log('Zooming to item bbox:', item.bbox);
+      window.dispatchEvent(zoomEvent);
+    }
+  }, [onShowItemsOnMap]);
 
   // Helper function to extract thumbnail from item
   const extractThumbnail = (item) => {
@@ -294,7 +331,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return () => window.removeEventListener('cloudCoverFilterChanged', handler);
   }, []);
 
-  // Listen for showItemsOnMap event to update the items list and hide loading indicator
+  // Listen for showItemDetails event to update the items list and hide loading indicator
   useEffect(() => {
     const handler = (event) => {
       const numberReturned = event?.detail?.numberReturned;
@@ -328,24 +365,41 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     const handler = (event) => {
       const itemId = event?.detail?.itemId;
       if (itemId) {
-        setSelectedItemId(itemId);
-        setVisibleThumbnailItemId(null);
-        
-        // Scroll the selected item into view
-        setTimeout(() => {
-          const selectedElement = document.querySelector(`[data-item-id="${itemId}"]`);
-          if (selectedElement) {
-            selectedElement.scrollIntoView({ 
-              behavior: 'smooth', 
-              block: 'nearest',
-              inline: 'nearest' 
-            });
-          }
-        }, 100); // Small delay to ensure DOM updates
+        // Find the item in queryItems by ID
+        const selectedItem = queryItems.find(item => item.id === itemId);
+        if (selectedItem) {
+          // Make map clicks behave like clicking item names - zoom and show only that item
+          handleItemClick(selectedItem);
+        } else {
+          // Fallback: just set selected ID and scroll if item not found
+          setSelectedItemId(itemId);
+          setVisibleThumbnailItemId(null);
+          
+          // Scroll the selected item into view
+          setTimeout(() => {
+            const selectedElement = document.querySelector(`[data-item-id="${itemId}"]`);
+            if (selectedElement) {
+              selectedElement.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'nearest',
+                inline: 'nearest' 
+              });
+            }
+          }, 100); // Small delay to ensure DOM updates
+        }
       }
     };
     window.addEventListener('selectItem', handler);
     return () => window.removeEventListener('selectItem', handler);
+  }, [queryItems, handleItemClick]);
+
+  // Listen for itemDetailsLoaded event to clear loading state
+  useEffect(() => {
+    const handler = () => {
+      setIsLoadingItemDetails(false);
+    };
+    window.addEventListener('itemDetailsLoaded', handler);
+    return () => window.removeEventListener('itemDetailsLoaded', handler);
   }, []);
 
   // Listen for updateNextLink event from bbox searches
@@ -359,60 +413,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     window.addEventListener('updateNextLink', handler);
     return () => window.removeEventListener('updateNextLink', handler);
   }, []);
-
-  const handleDownloadFeatureCollection = async () => {
-    try {
-      // Check if we have items to download
-      if (!queryItems || queryItems.length === 0) {
-        alert('No data to download. Please query some items first.');
-        return;
-      }
-
-      // Include complete STAC item data without filtering
-      const features = queryItems.map(item => ({
-        type: 'Feature',
-        id: item.id,
-        geometry: item.geometry,
-        bbox: item.bbox,
-        properties: item.properties || {},
-        assets: item.assets || {},
-        links: item.links || [],
-        collection: item.collection,
-        stac_version: item.stac_version,
-        stac_extensions: item.stac_extensions
-      }));
-
-      const geojsonData = {
-        type: 'FeatureCollection',
-        features: features,
-        numberReturned: features.length,
-        numberMatched: numberMatched || features.length
-      };
-
-      // Create filename
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-      const collectionName = collection ? collection.id.replace(/[^a-zA-Z0-9-_]/g, '_') : 'all_collections';
-      const filename = `${collectionName}_items_${timestamp}.geojson`;
-
-      // Create and download the file
-      const blob = new Blob([JSON.stringify(geojsonData, null, 2)], { type: 'application/geo+json' });
-      const url_blob = URL.createObjectURL(blob);
-
-      const link = document.createElement('a');
-      link.href = url_blob;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      URL.revokeObjectURL(url_blob);
-
-      alert(`Downloaded ${features.length} items to ${filename}`);
-
-    } catch (error) {
-      alert(`Failed to download feature collection: ${error.message}`);
-    }
-  };
 
   const buildItemsUrl = (baseUrl, collectionId, limit, datetimeFilter, cloudCoverFilter) => {
     let url = `${baseUrl}/collections/${collectionId}/items?limit=${limit}`;
@@ -700,8 +700,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                         className="details-btn"
                         title="Show item details"
                         aria-label="Show item details"
+                        disabled={isLoadingItemDetails}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (isLoadingItemDetails) return;
+                          setIsLoadingItemDetails(true); // Set loading immediately
                           const detailsEvent = new CustomEvent('showItemDetails', {
                             detail: {
                               id: item.id,
@@ -991,41 +994,6 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     }
   };
 
-  function handleItemClick(item) {
-    console.log('Item clicked:', item);
-    // Close any open overlays when selecting an item
-    try {
-      window.dispatchEvent(new CustomEvent('hideOverlays'));
-      window.dispatchEvent(new CustomEvent('hideMapThumbnail'));
-    } catch (err) {
-      console.warn('Failed to dispatch hideOverlays on item click:', err);
-    }
-    setSelectedItemId(item.id);
-    setVisibleThumbnailItemId(null);
-    
-    // Show only this item on the map
-    if (onShowItemsOnMap) {
-      console.log('Showing single item on map:', item);
-      onShowItemsOnMap([item]);
-    }
-    
-    // Zoom to the item's bbox if available with better zoom level
-    if (item.bbox) {
-      const zoomEvent = new CustomEvent('zoomToBbox', { 
-        detail: { 
-          bbox: item.bbox,
-          options: {
-            padding: 50,
-            maxZoom: 18,
-            essential: true
-          }
-        } 
-      });
-      console.log('Zooming to item bbox:', item.bbox);
-      window.dispatchEvent(zoomEvent);
-    }
-  }
-
   const handleEyeButtonClick = (e, item) => {
     e.stopPropagation();
     
@@ -1039,6 +1007,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     <>
       {isLoadingItems && <LoadingIndicator message="Loading items..." />}
       {isLoadingNext && <LoadingIndicator message="Loading next page..." />}
+      {isLoadingItemDetails && <LoadingIndicator message="Loading item details..." />}
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
@@ -1287,8 +1256,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                       className="details-btn"
                       title="Zoom to item and show details"
                       aria-label="Zoom to item and show details"
+                      disabled={isLoadingItemDetails}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (isLoadingItemDetails) return; // Prevent multiple clicks
+                        setIsLoadingItemDetails(true); // Set loading immediately
                         handleItemClick(item);
                         const detailsEvent = new CustomEvent('showItemDetails', {
                           detail: {

@@ -439,65 +439,28 @@ function SFEOSMap() {
       
       // Add click handler for item details if itemData is provided
       if (itemData) {
-        map.on('click', `geometry-fill-${id}`, async (e) => {
+        map.on('click', `geometry-fill-${id}`, (e) => {
           console.log('🖱️ Clicked on geometry:', id, itemData);
           
-          // 1. Select the item in the list (this is still fast)
+          // Select the item in the list (this triggers handleItemClick in StacCollectionDetails)
           window.dispatchEvent(new CustomEvent('selectItem', {
             detail: { itemId: itemData.id }
           }));
           
-          // 2. Show a loading state in the details panel
-          window.dispatchEvent(new CustomEvent('showItemDetails', { detail: { isLoading: true, id: itemData.id } }));
+          // Dispatch the showItemDetails event with the item data
+          // This will be handled by the centralized showItemDetailsHandler
+          window.dispatchEvent(new CustomEvent('showItemDetails', {
+            detail: {
+              id: itemData.id,
+              title: itemData.title,
+              datetime: itemData.datetime || null,
+              assetsCount: itemData.assetsCount || 0,
+              bbox: itemData.bbox || null,
+              collection: itemData.collection || null,
+              properties: itemData.properties || {}
+            }
+          }));
 
-          try {
-            // 3. Fetch the FULL item details
-            console.log('%c🔗 FETCHING FULL ITEM DETAILS:', 'color: purple; font-weight: bold; font-size: 14px;');
-            console.log('%cLazy loading full details for item:', itemData.id, 'color: purple;');
-            const baseUrl = stacApiUrlRef.current;
-            const itemUrl = `${baseUrl}/collections/${itemData.collection}/items/${itemData.id}`;
-            console.log('%cGET ' + itemUrl, 'color: purple; font-family: monospace; font-size: 12px;');
-            console.log('%c📋 Fetching complete item metadata (no fields limitation)', 'color: red; font-weight: bold;');
-            
-            const resp = await fetch(itemUrl);
-            if (!resp.ok) throw new Error('Failed to fetch full item details');
-            const fullItemDetails = await resp.json();
-
-            // 4. Dispatch the full details to the overlay
-            window.dispatchEvent(new CustomEvent('showItemDetails', {
-              detail: {
-                id: fullItemDetails.id,
-                title: fullItemDetails.properties?.title || fullItemDetails.id,
-                datetime: fullItemDetails.properties?.datetime || null,
-                assetsCount: Object.keys(fullItemDetails.assets || {}).length,
-                bbox: fullItemDetails.bbox || null,
-                collection: fullItemDetails.collection || null,
-                properties: fullItemDetails.properties || {}
-              }
-            }));
-
-          } catch (fetchError) {
-            console.error("Failed to fetch full item:", fetchError);
-            // Show an error in the details panel
-            window.dispatchEvent(new CustomEvent('showItemDetails', { detail: { error: true, id: itemData.id } }));
-          }
-
-          // Zoom to the item's bbox if available with better zoom level
-          if (itemData.bbox) {
-            const zoomEvent = new CustomEvent('zoomToBbox', { 
-              detail: { 
-                bbox: itemData.bbox,
-                options: {
-                  padding: 50,
-                  maxZoom: 18,
-                  essential: true
-                }
-              }
-            });
-            console.log('Zooming to item bbox:', itemData.bbox);
-            window.dispatchEvent(zoomEvent);
-          }
-          
           // Prevent event bubbling
           e.originalEvent.stopPropagation();
         });
@@ -1264,18 +1227,94 @@ function SFEOSMap() {
       }
     };
 
-    const showItemDetailsHandler = (event) => {
+    const showItemDetailsHandler = async (event) => {
       try {
-        const d = event.detail || null;
-        if (d) {
-          setItemDetails(d);
-          // Hide thumbnail overlay when showing details
-          setThumbnail({ url: null, title: '', type: null });
-        } else {
-          console.warn('showItemDetails event missing detail');
+        const basicItem = event.detail || null;
+        if (!basicItem || !basicItem.id) {
+          console.warn('showItemDetails event missing item data or ID');
+          return;
         }
+
+        // If we already have comprehensive item data (more than basic search fields)
+        const hasFullProperties = basicItem.properties &&
+          (Object.keys(basicItem.properties).length > 2 ||
+           basicItem.assets ||
+           basicItem.links);
+
+        if (hasFullProperties) {
+          // Already have full data, use it directly
+          setItemDetails(basicItem);
+          setThumbnail({ url: null, title: '', type: null });
+          return;
+        }
+
+        // Only fetch full details when explicitly requested via info button
+        // This preserves search performance while ensuring details are complete
+        if (basicItem.collection) {
+          console.log('📄 Fetching full item details for:', basicItem.id);
+          const baseUrl = stacApiUrlRef.current || 'http://localhost:8080';
+          const itemUrl = `${baseUrl}/collections/${encodeURIComponent(basicItem.collection)}/items/${encodeURIComponent(basicItem.id)}`;
+
+          try {
+            const resp = await fetch(itemUrl);
+            if (resp.ok) {
+              const fullItem = await resp.json();
+
+              // Merge full API data with our processed item
+              const fullItemDetails = {
+                id: fullItem.id,
+                title: fullItem.properties?.title || fullItem.id,
+                datetime: fullItem.properties?.datetime || fullItem.properties?.start_datetime || null,
+                assetsCount: Object.keys(fullItem.assets || {}).length,
+                bbox: fullItem.bbox || null,
+                collection: fullItem.collection || basicItem.collection,
+                properties: fullItem.properties || {},
+                geometry: fullItem.geometry || null,
+                assets: fullItem.assets || {},
+                links: fullItem.links || []
+              };
+
+              setItemDetails(fullItemDetails);
+              console.log('📄 Full item details loaded');
+              
+              // Notify that loading is complete
+              window.dispatchEvent(new CustomEvent('itemDetailsLoaded'));
+            } else {
+              // API failed, use basic data
+              console.warn(`Failed to fetch full item details (${resp.status})`);
+              setItemDetails(basicItem);
+              
+              // Still notify that loading is complete (with basic data)
+              window.dispatchEvent(new CustomEvent('itemDetailsLoaded'));
+            }
+          } catch (fetchError) {
+            console.warn('Error fetching full item details:', fetchError);
+            setItemDetails(basicItem);
+            
+            // Still notify that loading is complete (with basic data)
+            window.dispatchEvent(new CustomEvent('itemDetailsLoaded'));
+          }
+        } else {
+          // No collection info, use basic data
+          console.warn('Collection not provided for item details');
+          setItemDetails(basicItem);
+          
+          // Still notify that loading is complete (with basic data)
+          window.dispatchEvent(new CustomEvent('itemDetailsLoaded'));
+        }
+
+        // Always hide thumbnail when showing details
+        setThumbnail({ url: null, title: '', type: null });
       } catch (e) {
         console.error('Error handling showItemDetails:', e);
+        // Fallback
+        const basicItem = event.detail || null;
+        if (basicItem) {
+          setItemDetails(basicItem);
+          
+          // Still notify that loading is complete (with basic data)
+          window.dispatchEvent(new CustomEvent('itemDetailsLoaded'));
+        }
       }
     };
 
