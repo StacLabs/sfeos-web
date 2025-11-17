@@ -1031,48 +1031,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     
     console.log('👁 Eye button clicked for item:', item.id);
     
-    // Toggle thumbnail visibility for this item
-    if (visibleThumbnailItemId === item.id) {
-      // Hide thumbnail
-      setVisibleThumbnailItemId(null);
-      window.dispatchEvent(new CustomEvent('hideOverlays'));
-      window.dispatchEvent(new CustomEvent('hideMapThumbnail'));
-      // Show all items again
-      if (onShowItemsOnMap) {
-        console.log('Showing all query items on map');
-        onShowItemsOnMap(queryItems);
-      }
-    } else {
-      // Show thumbnail
-      setVisibleThumbnailItemId(item.id);
-      const { thumbnailUrl, thumbnailType } = extractThumbnail(item);
-      
-      // Clear the item geometries from the map to hide the red square
-      window.dispatchEvent(new CustomEvent('clearItemGeometries'));
-      
-      // Dispatch the thumbnail event - this will show the overlay
-      const thumbEvent = new CustomEvent('showItemThumbnail', {
-        detail: {
-          url: thumbnailUrl || null,
-          title: item.title || item.id,
-          type: thumbnailType || null
-        }
-      });
-      window.dispatchEvent(thumbEvent);
-
-      // Show thumbnail on map if available and has geometry
-      if (item.thumbnailUrl && item.geometry) {
-        const mapThumbEvent = new CustomEvent('showMapThumbnail', {
-          detail: {
-            geometry: item.geometry,
-            url: item.thumbnailUrl,
-            title: item.title || item.id,
-            type: item.thumbnailType || null
-          }
-        });
-        window.dispatchEvent(mapThumbEvent);
-      }
-    }
+    // Make eye button behave like clicking the item name - zoom to item and show only that item
+    handleItemClick(item);
   };
 
   return (
@@ -1325,10 +1285,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     </button>
                     <button
                       className="details-btn"
-                      title="Show item details"
-                      aria-label="Show item details"
+                      title="Zoom to item and show details"
+                      aria-label="Zoom to item and show details"
                       onClick={(e) => {
                         e.stopPropagation();
+                        handleItemClick(item);
                         const detailsEvent = new CustomEvent('showItemDetails', {
                           detail: {
                             id: item.id,
