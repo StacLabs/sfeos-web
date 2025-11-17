@@ -172,7 +172,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         } catch {}
         return merged;
       });
-      if (data.numberReturned != null) setNumberReturned(prev => prev + (data.numberReturned || 0));
+      // Update numberReturned to reflect total items loaded so far
+      setNumberReturned(prev => prev + (data.numberReturned || newItems.length));
       if (data.numberMatched != null) setNumberMatched(data.numberMatched);
       try {
         const next = Array.isArray(data.links) ? data.links.find(l => l.rel === 'next' && l.href) : null;
@@ -1167,7 +1168,14 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             }}
             disabled={isLoadingItems}
           >
-            <span className="expand-label">Query Items</span>
+            <span className="expand-label">
+              Query Items
+              {(numberReturned !== null || numberMatched !== null) && (
+                <span className="query-items-count">
+                  ({numberReturned !== null ? numberReturned : '?'}/{numberMatched !== null ? numberMatched : 'Not provided'})
+                </span>
+              )}
+            </span>
             <span className="expand-arrow">{isQueryItemsVisible ? '▼' : '▶'}</span>
           </button>
         </div>

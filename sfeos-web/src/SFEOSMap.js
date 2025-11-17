@@ -1416,6 +1416,9 @@ function SFEOSMap() {
         console.log('numberReturned:', data.numberReturned);
         console.log('numberMatched:', data.numberMatched);
         
+        // Extract next link from API response
+        const nextSearchLink = data.links?.find(l => l.rel === 'next')?.href;
+        
         // Process features
         const processedFeatures = features.map(item => ({
           id: item.id,
@@ -1428,18 +1431,16 @@ function SFEOSMap() {
           datetime: item.properties?.datetime || item.properties?.start_datetime || null
         }));
         
-        // Dispatch ONE event with searchId - this is the crucial fix
+        // Dispatch showItemsOnMap event with count values
         window.dispatchEvent(new CustomEvent('showItemsOnMap', { 
           detail: { 
             items: processedFeatures, 
-            numberReturned: data.numberReturned, 
-            numberMatched: data.numberMatched, 
-            searchId: mySearchId  // 👈 This ensures staleness checking works for ALL searches
+            numberReturned: data.numberReturned != null ? data.numberReturned : features.length,
+            numberMatched: data.numberMatched != null ? data.numberMatched : null,
+            searchId: mySearchId  
           } 
         }));
         
-        // Dispatch nextLink to update pagination for Next button
-        const nextSearchLink = data.links?.find(l => l.rel === 'next')?.href;
         if (nextSearchLink) {
           window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: nextSearchLink } }));
         }
