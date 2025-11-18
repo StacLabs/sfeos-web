@@ -108,6 +108,11 @@ function SFEOSMap() {
       const polygon = drawData.features[0];
       const geoJson = JSON.stringify(polygon.geometry);
       
+      // Calculate area in square kilometers
+      const areaInSquareMeters = turf.area(polygon);
+      const areaInSquareKm = (areaInSquareMeters / 1000000).toFixed(2);
+      setDrawnPolygonArea(areaInSquareKm);
+      
       const baseUrl = stacApiUrlRef.current;
       let url;
       
@@ -1866,30 +1871,30 @@ function SFEOSMap() {
         © <a href="https://maptiler.com/" target="_blank" rel="noopener noreferrer">MapTiler</a> | 
         © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
       </div>
-      {/* Polygon area display */}
+      {/* Polygon area display - bottom center */}
       {drawnPolygonArea !== null && (
         <div
           className="calculation-box"
           style={{
-            height: 75,
-            width: 150,
             position: 'absolute',
-            bottom: 40,
-            left: 10,
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-            padding: 15,
+            bottom: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(255, 255, 255, 0.75)',
+            padding: '8px 16px',
             textAlign: 'center',
             fontFamily: 'Open Sans',
             fontSize: 13,
             borderRadius: 4,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            zIndex: 1000
           }}
         >
-          <p style={{ fontFamily: 'Open Sans', margin: 0, fontSize: 13 }}>
+          <p style={{ fontFamily: 'Open Sans', margin: 0, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <strong>{drawnPolygonArea}</strong>
-          </p>
-          <p style={{ fontFamily: 'Open Sans', margin: 0, fontSize: 13 }}>
-            square meters
+            <span style={{ marginLeft: '4px', fontSize: 11, color: '#666', fontWeight: 'normal' }}>
+              sq. km
+            </span>
           </p>
         </div>
       )}
