@@ -1476,7 +1476,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     max="100"
                     value={cloudCoverMax}
                     onChange={(e) => setCloudCoverMax(Number(e.target.value))}
-                    style={{ width: '180px' }}
+                    style={{ maxWidth: '200px', width: '100%' }}
                   />
                 </div>
               </div>
