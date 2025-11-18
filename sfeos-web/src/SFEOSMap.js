@@ -117,9 +117,9 @@ function SFEOSMap() {
       let url;
       
       if (selectedCollectionId) {
-        // Single collection polygon search
+        // Single collection polygon search using collection-specific endpoint
         console.log('🔎 Searching within drawn polygon for collection:', selectedCollectionId);
-        url = `${baseUrl}/search?collections=${encodeURIComponent(selectedCollectionId)}&intersects=${encodeURIComponent(geoJson)}&limit=${encodeURIComponent(currentItemLimit)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
+        url = `${baseUrl}/collections/${selectedCollectionId}/items?intersects=${encodeURIComponent(geoJson)}&limit=${encodeURIComponent(currentItemLimit)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
       } else {
         // All collections polygon search
         console.log('🔎 Searching all collections within drawn polygon');
@@ -1609,7 +1609,16 @@ function SFEOSMap() {
         console.log('🔍 runSearch: drawData =', drawData);
         console.log('🔍 runSearch: drawnPolygonArea =', drawnPolygonArea);
         const baseUrl = stacApiUrlRef.current;
-        let url = `${baseUrl}/search?limit=${encodeURIComponent(lim)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
+        let url;
+        
+        // Use different endpoints for single collection vs all collections
+        if (selectedCollectionId) {
+          // Single collection endpoint
+          url = `${baseUrl}/collections/${selectedCollectionId}/items?limit=${encodeURIComponent(lim)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
+        } else {
+          // All collections search endpoint
+          url = `${baseUrl}/search?limit=${encodeURIComponent(lim)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
+        }
         
         // Add polygon if present
         if (drawData && drawData.features.length > 0) {
@@ -1619,14 +1628,6 @@ function SFEOSMap() {
           console.log('🔎 Searching with drawn polygon');
         } else {
           console.log('🔎 Searching without polygon - no features found');
-        }
-        
-        // Add collection if present
-        if (selectedCollectionId) {
-          console.log('... for collection:', selectedCollectionId);
-          url += `&collections=${encodeURIComponent(selectedCollectionId)}`;
-        } else {
-          console.log('... for all collections');
         }
         
         // Add datetime filter if present
