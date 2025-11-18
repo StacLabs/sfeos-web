@@ -313,8 +313,11 @@ function SFEOSMap() {
   
   const handleDrawDelete = useCallback((e) => {
     setDrawnPolygonArea(null);
-    // Clear search results when polygon is deleted
+    // Clear everything when polygon is deleted via trash button
     window.dispatchEvent(new CustomEvent('clearSearchResults'));
+    window.dispatchEvent(new CustomEvent('hideOverlays'));
+    window.dispatchEvent(new CustomEvent('hideLoading'));
+    console.log('🗑️ Trash button: Cleared polygon and all results');
   }, []);
   
   const handleDrawUpdate = useCallback((e) => {

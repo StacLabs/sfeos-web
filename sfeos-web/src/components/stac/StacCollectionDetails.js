@@ -684,6 +684,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={itemLimitDisplay} 
+                  style={{ width: '45px' }}
                   onChange={(e) => {
                     const value = e.target.value;
                     // Allow empty string or valid digit sequences
@@ -736,6 +737,32 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   }}
                 >
                   Filter
+                </button>
+                <button
+                  type="button"
+                  className="trash-btn"
+                  title="Clear polygon drawing"
+                  aria-label="Clear polygon drawing"
+                  style={{ 
+                    borderRadius: '8px', 
+                    height: '28px', 
+                    padding: '0 6px',
+                    fontSize: '14px',
+                    border: '1px solid #ccc'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    try {
+                      window.dispatchEvent(new CustomEvent('clearBbox'));
+                      window.dispatchEvent(new CustomEvent('clearSearchResults'));
+                      window.dispatchEvent(new CustomEvent('hideOverlays'));
+                      window.dispatchEvent(new CustomEvent('hideLoading'));
+                    } catch (err) {
+                      console.warn('Failed to dispatch clear events:', err);
+                    }
+                  }}
+                >
+                  🗑️
                 </button>
               </div>
               {queryItems.length > 0 ? (
@@ -1257,6 +1284,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 inputMode="numeric"
                 pattern="[0-9]*"
                 value={itemLimitDisplay} 
+                style={{ width: '45px' }}
                 onChange={(e) => {
                   const value = e.target.value;
                   // Allow empty string or valid digit sequences
@@ -1309,6 +1337,32 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 }}
               >
                 Filter
+              </button>
+              <button
+                type="button"
+                className="trash-btn"
+                title="Clear polygon drawing"
+                aria-label="Clear polygon drawing"
+                style={{ 
+                  borderRadius: '8px', 
+                  height: '28px', 
+                  padding: '0 6px',
+                  fontSize: '14px',
+                  border: '1px solid #ccc'
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  try {
+                    window.dispatchEvent(new CustomEvent('clearBbox'));
+                    window.dispatchEvent(new CustomEvent('clearSearchResults'));
+                    window.dispatchEvent(new CustomEvent('hideOverlays'));
+                    window.dispatchEvent(new CustomEvent('hideLoading'));
+                  } catch (err) {
+                    console.warn('Failed to dispatch clear events:', err);
+                  }
+                }}
+              >
+                🗑️
               </button>
             </div>
             {queryItems.length > 0 ? (
