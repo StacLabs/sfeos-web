@@ -1849,8 +1849,8 @@ function SFEOSMap() {
         interactive={true}
         touchZoomRotate={true}
         dragRotate={projection === 'mercator'}  // Disable drag rotation on globe
-        dragPan={!isDrawingBbox}
-        doubleClickZoom={!isDrawingBbox}
+        dragPan={true}
+        doubleClickZoom={true}
         scrollZoom={true}
         boxZoom={true}
         keyboard={true}
