@@ -703,8 +703,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 <button
                   type="button"
                   className={`bbox-btn ${isBboxModeOn ? 'bbox-on' : 'bbox-off'}`}
-                  title="Toggle BBox draw mode"
-                  aria-label="Toggle BBox draw mode"
+                  title="Toggle polygon draw mode"
+                  aria-label="Toggle polygon draw mode"
                   onClick={(e) => {
                     e.stopPropagation();
                     try {
@@ -714,7 +714,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     }
                   }}
                 >
-                  BBOX
+                  POLY
                 </button>
                 <button
                   type="button"
@@ -1274,8 +1274,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
               <button
                 type="button"
                 className={`bbox-btn ${isBboxModeOn ? 'bbox-on' : 'bbox-off'}`}
-                title="Toggle BBox draw mode"
-                aria-label="Toggle BBox draw mode"
+                title="Toggle polygon draw mode"
+                aria-label="Toggle polygon draw mode"
                 onClick={(e) => {
                   e.stopPropagation();
                   try {
@@ -1285,7 +1285,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   }
                 }}
               >
-                BBOX
+                POLY
               </button>
               <button
                 type="button"
