@@ -220,8 +220,9 @@ function SFEOSMap() {
           type: 'line',
           filter: ['all', ['==', '$type', 'Polygon'], ['!=', 'mode', 'static']],
           paint: {
-            'line-color': '#606060',
-            'line-width': 1
+            'line-color': '#ff9800',
+            'line-width': 1,
+            'line-dasharray': [2, 2]
           }
         },
         // Active polygon outline
@@ -230,8 +231,31 @@ function SFEOSMap() {
           type: 'line',
           filter: ['all', ['==', '$type', 'Polygon'], ['==', 'active', 'true']],
           paint: {
-            'line-color': '#404040',
-            'line-width': 1.5
+            'line-color': '#ff9800',
+            'line-width': 1,
+            'line-dasharray': [2, 2]
+          }
+        },
+        // Active line while drawing (follows cursor)
+        {
+          id: 'gl-draw-line',
+          type: 'line',
+          filter: ['all', ['==', '$type', 'LineString'], ['!=', 'mode', 'static']],
+          paint: {
+            'line-color': '#ff9800',
+            'line-width': 1,
+            'line-dasharray': [2, 2]
+          }
+        },
+        // Active line while drawing (hover state)
+        {
+          id: 'gl-draw-line-active',
+          type: 'line',
+          filter: ['all', ['==', '$type', 'LineString'], ['==', 'active', 'true']],
+          paint: {
+            'line-color': '#ff9800',
+            'line-width': 1,
+            'line-dasharray': [2, 2]
           }
         },
         // Vertex point halos - for all modes including drawing
