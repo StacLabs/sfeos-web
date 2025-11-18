@@ -385,6 +385,15 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return () => window.removeEventListener('cloudCoverFilterChanged', handler);
   }, []);
 
+  // Listen for hideLoading event to dismiss loading modal
+  useEffect(() => {
+    const handler = () => {
+      setIsLoadingItems(false);
+    };
+    window.addEventListener('hideLoading', handler);
+    return () => window.removeEventListener('hideLoading', handler);
+  }, []);
+
   // Listen for showItemDetails event to update the items list and hide loading indicator
   useEffect(() => {
     const handler = (event) => {
@@ -802,7 +811,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 <div className="datetime-filter-content">
                   {/* Datetime Filter Section */}
                   <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #ddd' }}>
-                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
                     <div className="datetime-filter-group">
                       <label htmlFor="start-date">Start Date:</label>
                       <input
@@ -827,7 +836,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
                   {/* Cloud Cover Filter Section */}
                   <div style={{ marginBottom: '20px' }}>
-                    <h4 style={{ margin: '0 0 2px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
                     <div className="datetime-filter-group">
                       <label htmlFor="cloud-cover-slider">Max Cloud Cover: {cloudCoverMax}%</label>
                       <input
@@ -837,7 +846,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                         max="100"
                         value={cloudCoverMax}
                         onChange={(e) => setCloudCoverMax(Number(e.target.value))}
-                        style={{ width: '200px' }}
+                        style={{ width: '180px' }}
                       />
                     </div>
                   </div>
@@ -858,7 +867,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                         setIsFilterOpen(false);
                         window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter } }));
                         window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter } }));
-                        window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                        window.dispatchEvent(new CustomEvent('runSearch', { detail: { limit: itemLimitRef.current } }));
                       }}
                     >
                       Apply
@@ -874,9 +883,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                         setAppliedDatetimeFilter('');
                         setAppliedCloudCoverFilter('');
                         appliedCloudCoverFilterRef.current = '';
-                        window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter: '' } }));
-                        window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter: '' } }));
-                        window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                        window.dispatchEvent(new CustomEvent('clearBbox'));
+                        window.dispatchEvent(new CustomEvent('clearSearchResults'));
+                        window.dispatchEvent(new CustomEvent('hideOverlays'));
+                        window.dispatchEvent(new CustomEvent('hideLoading'));
+                        window.dispatchEvent(new CustomEvent('toggleBboxSearch'));
                       }}
                     >
                       Clear All
@@ -1376,7 +1387,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             <div className="datetime-filter-content">
               {/* Datetime Filter Section */}
               <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #ddd' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
                 <div className="datetime-filter-group">
                   <label htmlFor="start-date">Start Date:</label>
                   <input
@@ -1401,7 +1412,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
               {/* Cloud Cover Filter Section */}
               <div style={{ marginBottom: '10px' }}>
-                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
                 <div className="datetime-filter-group">
                   <label htmlFor="cloud-cover-slider">Max Cloud Cover: {cloudCoverMax}%</label>
                   <input
@@ -1411,7 +1422,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     max="100"
                     value={cloudCoverMax}
                     onChange={(e) => setCloudCoverMax(Number(e.target.value))}
-                    style={{ width: '200px' }}
+                    style={{ width: '180px' }}
                   />
                 </div>
               </div>
@@ -1432,7 +1443,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     setIsFilterOpen(false);
                     window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter } }));
                     window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter } }));
-                    window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                    window.dispatchEvent(new CustomEvent('runSearch', { detail: { limit: itemLimitRef.current } }));
                   }}
                 >
                   Apply
@@ -1448,9 +1459,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     setAppliedDatetimeFilter('');
                     setAppliedCloudCoverFilter('');
                     appliedCloudCoverFilterRef.current = '';
-                    window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter: '' } }));
-                    window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter: '' } }));
-                    window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                    window.dispatchEvent(new CustomEvent('clearBbox'));
+                    window.dispatchEvent(new CustomEvent('clearSearchResults'));
+                    window.dispatchEvent(new CustomEvent('hideOverlays'));
+                    window.dispatchEvent(new CustomEvent('hideLoading'));
+                    window.dispatchEvent(new CustomEvent('toggleBboxSearch'));
                   }}
                 >
                   Clear All

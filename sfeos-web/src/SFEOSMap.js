@@ -1579,6 +1579,8 @@ function SFEOSMap() {
         
         // Build URL - unified for all search types
         const drawData = drawRef.current?.getAll();
+        console.log('🔍 runSearch: drawData =', drawData);
+        console.log('🔍 runSearch: drawnPolygonArea =', drawnPolygonArea);
         const baseUrl = stacApiUrlRef.current;
         let url = `${baseUrl}/search?limit=${encodeURIComponent(lim)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
         
@@ -1589,7 +1591,7 @@ function SFEOSMap() {
           url += `&intersects=${encodeURIComponent(geoJson)}`;
           console.log('🔎 Searching with drawn polygon');
         } else {
-          console.log('🔎 Searching without polygon');
+          console.log('🔎 Searching without polygon - no features found');
         }
         
         // Add collection if present
@@ -1604,6 +1606,12 @@ function SFEOSMap() {
         if (appliedDatetimeFilterRef.current) {
           console.log('... with datetime:', appliedDatetimeFilterRef.current);
           url += `&datetime=${encodeURIComponent(appliedDatetimeFilterRef.current)}`;
+        }
+        
+        // Add cloud cover filter if present
+        if (appliedCloudCoverFilterRef.current) {
+          console.log('... with cloud cover:', appliedCloudCoverFilterRef.current);
+          url += `&query=${encodeURIComponent(appliedCloudCoverFilterRef.current)}`;
         }
         
         // Perform fetch
@@ -1744,6 +1752,15 @@ function SFEOSMap() {
     };
     window.addEventListener('clearItemGeometries', clearItemGeometriesHandler);
     
+    const clearSearchResultsHandler = () => {
+      const map = mapRef.current?.getMap();
+      if (map) {
+        console.log('🧹 Clearing search results');
+        clearGeometries(map);
+      }
+    };
+    window.addEventListener('clearSearchResults', clearSearchResultsHandler);
+    
     const clearSearchCacheHandler = () => {
       console.log('🧹 Clearing search cache and aborting operations');
       try {
@@ -1810,9 +1827,10 @@ function SFEOSMap() {
       window.removeEventListener('downloadFullResults', downloadFullResultsHandler);
       window.removeEventListener('clearBbox', clearBboxHandler);
       window.removeEventListener('clearItemGeometries', clearItemGeometriesHandler);
+      window.removeEventListener('clearSearchResults', clearSearchResultsHandler);
       window.removeEventListener('clearSearchCache', clearSearchCacheHandler);
     };
-  }, [isMapLoaded, handleZoomToBbox, handleShowItemsOnMap, isDrawingBbox, clearGeometries, selectedCollectionId, currentItemLimit]);
+  }, [isMapLoaded, handleZoomToBbox, handleShowItemsOnMap, isDrawingBbox, clearGeometries, selectedCollectionId, currentItemLimit, drawnPolygonArea]);
 
   // handleShowItemsOnMap has been moved up in the file
 
