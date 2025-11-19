@@ -10,6 +10,9 @@ import DarkModeToggle from './components/common/DarkModeToggle';
 import StacClient from './services/StacClient';
 import UrlSearchBox from './services/UrlSearchBox';
 import MapThumbnailOverlay from './components/map/MapThumbnailOverlay';
+import MapboxDraw from '@mapbox/mapbox-gl-draw';
+import * as turf from '@turf/turf';
+import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 import './SFEOSMap.css';
 
 const getInitialStacApiUrl = () => {
@@ -44,8 +47,7 @@ function SFEOSMap() {
   const [thumbnail, setThumbnail] = useState({ url: null, title: '', type: null });
   const [itemDetails, setItemDetails] = useState(null);
   const [isDrawingBbox, setIsDrawingBbox] = useState(false);
-  const [dragStartLngLat, setDragStartLngLat] = useState(null); // {lng, lat}
-  const [currentBbox, setCurrentBbox] = useState(null); // [minLon, minLat, maxLon, maxLat]
+  const [drawnPolygonArea, setDrawnPolygonArea] = useState(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [currentItemLimit, setCurrentItemLimit] = useState(10);
   const [stacApiUrl, setStacApiUrl] = useState(getInitialStacApiUrl);
@@ -56,6 +58,7 @@ function SFEOSMap() {
   // Refs
   const mapRef = useRef(null);
   const containerRef = useRef(null);
+  const drawRef = useRef(null); // MapboxDraw instance
   const bboxLayers = useRef(new Set()); // Track bounding box layer IDs
   const stacApiUrlRef = useRef(stacApiUrl);
   const appliedDatetimeFilterRef = useRef(''); // Track datetime filter from StacCollectionDetails
@@ -88,6 +91,96 @@ function SFEOSMap() {
     };
   }, []);
   
+  // Trigger search with drawn polygon
+  const triggerPolygonSearch = useCallback(async (drawData) => {
+    if (!drawData || drawData.features.length === 0) return;
+    
+    try {
+      // Cancel any previous request and set up a new controller
+      if (searchControllerRef.current) {
+        try { searchControllerRef.current.abort(); } catch {}
+      }
+      const controller = new AbortController();
+      searchControllerRef.current = controller;
+      const mySearchId = ++latestSearchIdRef.current;
+
+      // Get the first polygon feature
+      const polygon = drawData.features[0];
+      const geoJson = JSON.stringify(polygon.geometry);
+      
+      // Calculate area in square kilometers
+      const areaInSquareMeters = turf.area(polygon);
+      const areaInSquareKm = (areaInSquareMeters / 1000000).toFixed(2);
+      setDrawnPolygonArea(areaInSquareKm);
+      
+      const baseUrl = stacApiUrlRef.current;
+      let url;
+      
+      if (selectedCollectionId) {
+        // Single collection polygon search using collection-specific endpoint
+        console.log('🔎 Searching within drawn polygon for collection:', selectedCollectionId);
+        url = `${baseUrl}/collections/${selectedCollectionId}/items?intersects=${encodeURIComponent(geoJson)}&limit=${encodeURIComponent(currentItemLimit)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
+      } else {
+        // All collections polygon search
+        console.log('🔎 Searching all collections within drawn polygon');
+        url = `${baseUrl}/search?intersects=${encodeURIComponent(geoJson)}&limit=${encodeURIComponent(currentItemLimit)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
+      }
+      
+      // Add datetime filter if present
+      if (appliedDatetimeFilterRef.current) {
+        url += `&datetime=${encodeURIComponent(appliedDatetimeFilterRef.current)}`;
+      }
+      
+      // Add cloud cover filter if present
+      if (appliedCloudCoverFilterRef.current) {
+        url += `&query=${encodeURIComponent(appliedCloudCoverFilterRef.current)}`;
+      }
+      
+      console.log('%c🔗 POLYGON SEARCH:', 'color: blue; font-weight: bold; font-size: 14px;');
+      console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
+      lastSearchUrlRef.current = url;
+      window.dispatchEvent(new CustomEvent('hideOverlays'));
+      
+      const resp = await fetch(url, { method: 'GET', signal: controller.signal });
+      if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
+      const data = await resp.json();
+      
+      if (latestSearchIdRef.current !== mySearchId || controller.signal.aborted) {
+        console.log('Ignoring stale or aborted polygon search response');
+        return;
+      }
+      
+      const features = Array.isArray(data.features) ? data.features : [];
+      
+      // Process features to include properties and other metadata
+      const processedFeatures = features.map(item => ({
+        id: item.id,
+        title: item.properties?.title || item.id,
+        geometry: item.geometry || null,
+        bbox: item.bbox || null,
+        collection: item.collection || null,
+        properties: item.properties || {},
+        assetsCount: Object.keys(item.assets || {}).length,
+        datetime: item.properties?.datetime || item.properties?.start_datetime || null
+      }));
+      
+      // Only dispatch camera events after successful, non-aborted search
+      if (latestSearchIdRef.current === mySearchId && !controller.signal.aborted) {
+        window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched, searchId: mySearchId } }));
+        
+        // Dispatch polygon search nextLink to update pagination
+        const polygonNextLink = data.links?.find(l => l.rel === 'next')?.href;
+        if (polygonNextLink) {
+          window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: polygonNextLink } }));
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Polygon search failed:', err);
+      }
+    }
+  }, [selectedCollectionId, currentItemLimit]);
+  
   // Event Handlers
   const handleMapLoad = useCallback((e) => {
     console.log('Map loaded, map instance:', e.target);
@@ -101,10 +194,163 @@ function SFEOSMap() {
       });
     }
     
+    // Initialize MapboxDraw control
+    const draw = new MapboxDraw({
+      displayControlsDefault: false,
+      controls: {
+        polygon: true,
+        trash: true
+      },
+      defaultMode: 'simple_select',
+      styles: [
+        // Polygon fill
+        {
+          id: 'gl-draw-polygon-fill',
+          type: 'fill',
+          filter: ['all', ['==', '$type', 'Polygon'], ['!=', 'mode', 'static']],
+          paint: {
+            'fill-color': '#808080',
+            'fill-outline-color': '#808080',
+            'fill-opacity': 0.1
+          }
+        },
+        // Polygon outline
+        {
+          id: 'gl-draw-polygon-stroke-active',
+          type: 'line',
+          filter: ['all', ['==', '$type', 'Polygon'], ['!=', 'mode', 'static']],
+          paint: {
+            'line-color': '#ff9800',
+            'line-width': 1,
+            'line-dasharray': [2, 2]
+          }
+        },
+        // Active polygon outline
+        {
+          id: 'gl-draw-polygon-stroke-active-active',
+          type: 'line',
+          filter: ['all', ['==', '$type', 'Polygon'], ['==', 'active', 'true']],
+          paint: {
+            'line-color': '#ff9800',
+            'line-width': 1,
+            'line-dasharray': [2, 2]
+          }
+        },
+        // Active line while drawing (follows cursor)
+        {
+          id: 'gl-draw-line',
+          type: 'line',
+          filter: ['all', ['==', '$type', 'LineString'], ['!=', 'mode', 'static']],
+          paint: {
+            'line-color': '#ff9800',
+            'line-width': 1,
+            'line-dasharray': [2, 2]
+          }
+        },
+        // Active line while drawing (hover state)
+        {
+          id: 'gl-draw-line-active',
+          type: 'line',
+          filter: ['all', ['==', '$type', 'LineString'], ['==', 'active', 'true']],
+          paint: {
+            'line-color': '#ff9800',
+            'line-width': 1,
+            'line-dasharray': [2, 2]
+          }
+        },
+        // Vertex point halos - for all modes including drawing
+        {
+          id: 'gl-draw-polygon-and-line-vertex-halo-active',
+          type: 'circle',
+          filter: ['all', ['==', 'meta', 'vertex']],
+          paint: {
+            'circle-radius': 5,
+            'circle-color': '#FFFFFF'
+          }
+        },
+        // Vertex points - for all modes including drawing
+        {
+          id: 'gl-draw-polygon-and-line-vertex-active',
+          type: 'circle',
+          filter: ['all', ['==', 'meta', 'vertex']],
+          paint: {
+            'circle-radius': 4,
+            'circle-color': '#808080'
+          }
+        },
+        // Midpoint vertices
+        {
+          id: 'gl-draw-polygon-midpoint',
+          type: 'circle',
+          filter: ['all', ['==', 'meta', 'midpoint']],
+          paint: {
+            'circle-radius': 4,
+            'circle-color': '#A0A0A0',
+            'circle-opacity': 0.7
+          }
+        }
+      ]
+    });
+    
+    map.addControl(draw);
+    drawRef.current = draw;
+    
     console.log('Map center:', map.getCenter(), 'Zoom:', map.getZoom());
     setIsMapLoaded(true);
   }, []);
-
+  
+  // MapboxDraw event handlers
+  const handleDrawCreate = useCallback((e) => {
+    const data = drawRef.current?.getAll();
+    if (data && data.features.length > 0) {
+      const area = turf.area(data);
+      setDrawnPolygonArea(Math.round(area * 100) / 100);
+      
+      // Trigger search with the drawn polygon
+      triggerPolygonSearch(data);
+    }
+  }, [triggerPolygonSearch]);
+  
+  const handleDrawDelete = useCallback((e) => {
+    setDrawnPolygonArea(null);
+    // Clear everything when polygon is deleted via trash button
+    window.dispatchEvent(new CustomEvent('clearSearchResults'));
+    window.dispatchEvent(new CustomEvent('hideOverlays'));
+    window.dispatchEvent(new CustomEvent('hideLoading'));
+    console.log('🗑️ Trash button: Cleared polygon and all results');
+  }, []);
+  
+  const handleDrawUpdate = useCallback((e) => {
+    const data = drawRef.current?.getAll();
+    if (data && data.features.length > 0) {
+      const area = turf.area(data);
+      setDrawnPolygonArea(Math.round(area * 100) / 100);
+      
+      // Trigger search with the updated polygon
+      triggerPolygonSearch(data);
+    } else {
+      setDrawnPolygonArea(null);
+      window.dispatchEvent(new CustomEvent('clearSearchResults'));
+    }
+  }, [triggerPolygonSearch]);
+  
+  // Set up draw event handlers after map loads
+  useEffect(() => {
+    if (!isMapLoaded) return;
+    const map = mapRef.current?.getMap();
+    if (!map || !drawRef.current) return;
+    
+    map.on('draw.create', handleDrawCreate);
+    map.on('draw.delete', handleDrawDelete);
+    map.on('draw.update', handleDrawUpdate);
+    
+    return () => {
+      map.off('draw.create', handleDrawCreate);
+      map.off('draw.delete', handleDrawDelete);
+      map.off('draw.update', handleDrawUpdate);
+    };
+  }, [isMapLoaded, handleDrawCreate, handleDrawDelete, handleDrawUpdate]);
+  
   // Update projection when it changes (defer until map is idle to avoid animation conflicts)
   useEffect(() => {
     if (!isMapLoaded) return;
@@ -221,67 +467,6 @@ function SFEOSMap() {
     }
   }, []);
 
-  // Helpers for bbox drawing layer
-  const addOrUpdateBboxLayer = useCallback((map, bbox) => {
-    if (!bbox || bbox.length !== 4) return;
-    const [minLon, minLat, maxLon, maxLat] = bbox.map(Number);
-    const polygon = {
-      type: 'Feature',
-      geometry: {
-        type: 'Polygon',
-        coordinates: [[
-          [minLon, minLat],
-          [maxLon, minLat],
-          [maxLon, maxLat],
-          [minLon, maxLat],
-          [minLon, minLat]
-        ]]
-      }
-    };
-    const sourceId = 'bbox-draw-source';
-    const fillLayerId = 'bbox-draw-fill';
-    const lineLayerId = 'bbox-draw-line';
-    if (map.getSource(sourceId)) {
-      map.getSource(sourceId).setData({ type: 'FeatureCollection', features: [polygon] });
-    } else {
-      map.addSource(sourceId, {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [polygon] }
-      });
-      map.addLayer({
-        id: fillLayerId,
-        type: 'fill',
-        source: sourceId,
-        paint: {
-          'fill-color': '#4a90e2',
-          'fill-opacity': 0.15
-        }
-      });
-      map.addLayer({
-        id: lineLayerId,
-        type: 'line',
-        source: sourceId,
-        paint: {
-          'line-color': '#4a90e2',
-          'line-width': 2
-        }
-      });
-    }
-  }, []);
-
-  const clearBboxLayer = useCallback((map) => {
-    const sourceId = 'bbox-draw-source';
-    const fillLayerId = 'bbox-draw-fill';
-    const lineLayerId = 'bbox-draw-line';
-    try {
-      if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
-      if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
-      if (map.getSource(sourceId)) map.removeSource(sourceId);
-    } catch (e) {
-      console.warn('Error clearing bbox draw layer:', e);
-    }
-  }, []);
-  
   const handleStyleChange = useCallback((newStyle) => {
     setMapStyle(newStyle);
   }, []);
@@ -559,8 +744,7 @@ function SFEOSMap() {
     setThumbnail({ url: null, title: '', type: null });
     setItemDetails(null);
     setIsDrawingBbox(false);
-    setDragStartLngLat(null);
-    setCurrentBbox(null);
+    setDrawnPolygonArea(null);
     setSelectedCollectionId(null);
     setCurrentItemLimit(10);
 
@@ -575,7 +759,6 @@ function SFEOSMap() {
     if (map) {
       try {
         clearGeometries(map);
-        clearBboxLayer(map);
         
         // Guard: skip jumpTo if projection change is in progress
         if (!isChangingProjectionRef.current) {
@@ -591,7 +774,7 @@ function SFEOSMap() {
         console.warn('Failed to reset map view:', err);
       }
     }
-  }, [clearGeometries, clearBboxLayer]);
+  }, [clearGeometries]);
 
   // Switch the active STAC API and reset state
   const handleSwitchApi = useCallback((newUrl) => {
@@ -1342,17 +1525,32 @@ function SFEOSMap() {
       if (!map) return;
       const newState = !isDrawingBbox;
       if (newState) {
-        // Enable drawing; clear previous box
+        // Enable drawing; clear previous drawings and search results
         setIsDrawingBbox(true);
-        clearBboxLayer(map);
-        setCurrentBbox(null);
-        console.log('🔲 BBox drawing ON');
+        if (drawRef.current) {
+          drawRef.current.deleteAll();
+          // Change to drawing mode
+          drawRef.current.changeMode('draw_polygon');
+        }
+        setDrawnPolygonArea(null);
+        
+        // Clear existing search results for fresh drawing
+        clearGeometries(map);
+        window.dispatchEvent(new CustomEvent('hideOverlays'));
+        window.dispatchEvent(new CustomEvent('clearSearchResults'));
+        
+        console.log('🔲 Polygon drawing ON - cleared previous results');
         window.dispatchEvent(new CustomEvent('bboxModeChanged', { detail: { isOn: true } }));
       } else {
         // Turning off drawing
         setIsDrawingBbox(false);
-        setDragStartLngLat(null);
-        console.log('🔲 BBox drawing OFF');
+        if (drawRef.current) {
+          drawRef.current.deleteAll();
+          // Change back to select mode
+          drawRef.current.changeMode('simple_select');
+        }
+        setDrawnPolygonArea(null);
+        console.log('🔲 Polygon drawing OFF');
         window.dispatchEvent(new CustomEvent('bboxModeChanged', { detail: { isOn: false } }));
       }
     };
@@ -1407,31 +1605,41 @@ function SFEOSMap() {
         const lim = Number.isFinite(limFromEvent) && limFromEvent > 0 ? limFromEvent : 10;
         
         // Build URL - unified for all search types
-        const bbox = currentBbox;
+        const drawData = drawRef.current?.getAll();
+        console.log('🔍 runSearch: drawData =', drawData);
+        console.log('🔍 runSearch: drawnPolygonArea =', drawnPolygonArea);
         const baseUrl = stacApiUrlRef.current;
-        let url = `${baseUrl}/search?limit=${encodeURIComponent(lim)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
+        let url;
         
-        // Add bbox if present
-        if (bbox && bbox.length === 4) {
-          console.log('🔎 Searching with bbox');
-          const bboxParam = bbox.map(n => Number(n)).join(',');
-          url += `&bbox=${encodeURIComponent(bboxParam)}`;
+        // Use different endpoints for single collection vs all collections
+        if (selectedCollectionId) {
+          // Single collection endpoint
+          url = `${baseUrl}/collections/${selectedCollectionId}/items?limit=${encodeURIComponent(lim)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
         } else {
-          console.log('🔎 Searching without bbox');
+          // All collections search endpoint
+          url = `${baseUrl}/search?limit=${encodeURIComponent(lim)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
         }
         
-        // Add collection if present
-        if (selectedCollectionId) {
-          console.log('... for collection:', selectedCollectionId);
-          url += `&collections=${encodeURIComponent(selectedCollectionId)}`;
+        // Add polygon if present
+        if (drawData && drawData.features.length > 0) {
+          const polygon = drawData.features[0];
+          const geoJson = JSON.stringify(polygon.geometry);
+          url += `&intersects=${encodeURIComponent(geoJson)}`;
+          console.log('🔎 Searching with drawn polygon');
         } else {
-          console.log('... for all collections');
+          console.log('🔎 Searching without polygon - no features found');
         }
         
         // Add datetime filter if present
         if (appliedDatetimeFilterRef.current) {
           console.log('... with datetime:', appliedDatetimeFilterRef.current);
           url += `&datetime=${encodeURIComponent(appliedDatetimeFilterRef.current)}`;
+        }
+        
+        // Add cloud cover filter if present
+        if (appliedCloudCoverFilterRef.current) {
+          console.log('... with cloud cover:', appliedCloudCoverFilterRef.current);
+          url += `&query=${encodeURIComponent(appliedCloudCoverFilterRef.current)}`;
         }
         
         // Perform fetch
@@ -1554,8 +1762,11 @@ function SFEOSMap() {
     const clearBboxHandler = () => {
       const map = mapRef.current?.getMap();
       if (map) {
-        console.log('🧹 Clearing bbox layer');
-        clearBboxLayer(map);
+        console.log('🧹 Clearing polygon drawings');
+        if (drawRef.current) {
+          drawRef.current.deleteAll();
+        }
+        setDrawnPolygonArea(null);
       }
     };
     window.addEventListener('clearBbox', clearBboxHandler);
@@ -1568,6 +1779,15 @@ function SFEOSMap() {
       }
     };
     window.addEventListener('clearItemGeometries', clearItemGeometriesHandler);
+    
+    const clearSearchResultsHandler = () => {
+      const map = mapRef.current?.getMap();
+      if (map) {
+        console.log('🧹 Clearing search results');
+        clearGeometries(map);
+      }
+    };
+    window.addEventListener('clearSearchResults', clearSearchResultsHandler);
     
     const clearSearchCacheHandler = () => {
       console.log('🧹 Clearing search cache and aborting operations');
@@ -1586,7 +1806,10 @@ function SFEOSMap() {
         const map = mapRef.current?.getMap();
         if (map) {
           clearGeometries(map);
-          clearBboxLayer(map);
+          if (drawRef.current) {
+            drawRef.current.deleteAll();
+          }
+          setDrawnPolygonArea(null);
         }
         
         // Clear any pending animations
@@ -1632,9 +1855,10 @@ function SFEOSMap() {
       window.removeEventListener('downloadFullResults', downloadFullResultsHandler);
       window.removeEventListener('clearBbox', clearBboxHandler);
       window.removeEventListener('clearItemGeometries', clearItemGeometriesHandler);
+      window.removeEventListener('clearSearchResults', clearSearchResultsHandler);
       window.removeEventListener('clearSearchCache', clearSearchCacheHandler);
     };
-  }, [isMapLoaded, handleZoomToBbox, handleShowItemsOnMap, isDrawingBbox, clearBboxLayer, clearGeometries, currentBbox, selectedCollectionId, currentItemLimit]);
+  }, [isMapLoaded, handleZoomToBbox, handleShowItemsOnMap, isDrawingBbox, clearGeometries, selectedCollectionId, currentItemLimit, drawnPolygonArea]);
 
   // handleShowItemsOnMap has been moved up in the file
 
@@ -1660,171 +1884,6 @@ function SFEOSMap() {
         
         // Handle map load
         onLoad={handleMapLoad}
-        onMouseDown={(e) => {
-          if (!isDrawingBbox) return;
-          if (!e.lngLat) return;
-          if (e.originalEvent) {
-            e.originalEvent.preventDefault();
-            e.originalEvent.stopPropagation();
-          }
-          setDragStartLngLat({ lng: e.lngLat.lng, lat: e.lngLat.lat });
-        }}
-        onMouseMove={(e) => {
-          if (!isDrawingBbox || !dragStartLngLat) return;
-          if (!e.lngLat) return;
-          if (e.originalEvent) {
-            e.originalEvent.preventDefault();
-            e.originalEvent.stopPropagation();
-          }
-          const cur = { lng: e.lngLat.lng, lat: e.lngLat.lat };
-          const bbox = [
-            Math.min(dragStartLngLat.lng, cur.lng),
-            Math.min(dragStartLngLat.lat, cur.lat),
-            Math.max(dragStartLngLat.lng, cur.lng),
-            Math.max(dragStartLngLat.lat, cur.lat)
-          ];
-          setCurrentBbox(bbox);
-          const map = mapRef.current?.getMap();
-          if (map) addOrUpdateBboxLayer(map, bbox);
-        }}
-        onMouseUp={async (e) => {
-          if (!isDrawingBbox) return;
-          if (e && e.originalEvent) {
-            e.originalEvent.preventDefault();
-            e.originalEvent.stopPropagation();
-          }
-          setDragStartLngLat(null);
-          // Trigger GET /search?collections={id}&bbox=minLon,minLat,maxLon,maxLat or /search?bbox=... for all collections
-          try {
-            const bbox = currentBbox;
-            if (!bbox || bbox.length !== 4) return;
-            
-            // Cancel any previous request and set up a new controller
-            if (searchControllerRef.current) {
-              try { searchControllerRef.current.abort(); } catch {}
-            }
-            const controller = new AbortController();
-            searchControllerRef.current = controller;
-            const mySearchId = ++latestSearchIdRef.current;
-
-            if (selectedCollectionId) {
-              // Single collection bbox search
-              console.log('🔎 Searching within drawn bbox for collection:', selectedCollectionId);
-              const bboxParam = bbox.map(n => Number(n)).join(',');
-              const limitParam = currentItemLimit;
-              const baseUrl = stacApiUrlRef.current;
-              let url = `${baseUrl}/search?collections=${encodeURIComponent(selectedCollectionId)}&bbox=${encodeURIComponent(bboxParam)}&limit=${encodeURIComponent(limitParam)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
-              console.log('📅 Datetime filter ref value (onMouseUp):', appliedDatetimeFilterRef.current);
-              if (appliedDatetimeFilterRef.current) {
-                url += `&datetime=${encodeURIComponent(appliedDatetimeFilterRef.current)}`;
-                console.log('✅ Datetime filter ADDED to URL');
-              } else {
-                console.log('⚠️ Datetime filter is EMPTY');
-              }
-              console.log('%c🔗 BBOX SEARCH (COLLECTION):', 'color: blue; font-weight: bold; font-size: 14px;');
-              console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
-              console.log('%c📋 Using fields extension for fast map display', 'color: orange; font-weight: bold;');
-              lastSearchUrlRef.current = url; // Store for download
-              window.dispatchEvent(new CustomEvent('hideOverlays'));
-              const resp = await fetch(url, { method: 'GET', signal: controller.signal });
-              if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
-              const data = await resp.json();
-              if (latestSearchIdRef.current !== mySearchId || controller.signal.aborted) {
-                console.log('Ignoring stale or aborted bbox search response (collection)');
-                return;
-              }
-              const features = Array.isArray(data.features) ? data.features : [];
-              
-              // Process features to include properties and other metadata
-              const processedFeatures = features.map(item => ({
-                id: item.id,
-                title: item.properties?.title || item.id,
-                geometry: item.geometry || null,
-                bbox: item.bbox || null,
-                collection: item.collection || null,
-                properties: item.properties || {},
-                assetsCount: Object.keys(item.assets || {}).length,
-                datetime: item.properties?.datetime || item.properties?.start_datetime || null
-              }));
-              
-              window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched, searchId: mySearchId } }));
-              // NOTE: Removed zoomToBbox dispatch - showItemsOnMapHandler handles camera movement
-              
-              // Dispatch bbox search nextLink to update pagination
-              const bboxNextLink = data.links?.find(l => l.rel === 'next')?.href;
-              if (bboxNextLink) {
-                window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: bboxNextLink } }));
-              }
-              
-              // Optionally exit draw mode after search
-              setIsDrawingBbox(false);
-            } else {
-              // All Collections bbox search
-              console.log('🔎 Searching all collections within drawn bbox');
-              const bboxParam = bbox.map(n => Number(n)).join(',');
-              const limitParam = currentItemLimit;
-              const baseUrl = stacApiUrlRef.current;
-              let url = `${baseUrl}/search?bbox=${encodeURIComponent(bboxParam)}&limit=${encodeURIComponent(limitParam)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
-              console.log('📅 Datetime filter ref value (onMouseUp):', appliedDatetimeFilterRef.current);
-              if (appliedDatetimeFilterRef.current) {
-                url += `&datetime=${encodeURIComponent(appliedDatetimeFilterRef.current)}`;
-                console.log('✅ Datetime filter ADDED to URL');
-              } else {
-                console.log('⚠️ Datetime filter is EMPTY');
-              }
-              console.log('%c🔗 BBOX SEARCH (ALL COLLECTIONS):', 'color: blue; font-weight: bold; font-size: 14px;');
-              console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
-              console.log('%c📋 Using fields extension for fast map display', 'color: orange; font-weight: bold;');
-              lastSearchUrlRef.current = url; // Store for download
-              window.dispatchEvent(new CustomEvent('hideOverlays'));
-              const resp = await fetch(url, { method: 'GET', signal: controller.signal });
-              if (!resp.ok) throw new Error(`Search failed: ${resp.status}`);
-              const data = await resp.json();
-              if (latestSearchIdRef.current !== mySearchId || controller.signal.aborted) {
-                console.log('Ignoring stale or aborted bbox search response (all collections)');
-                return;
-              }
-              const features = Array.isArray(data.features) ? data.features : [];
-              console.log('%c📊 ALL COLLECTIONS SEARCH RESULTS (onMouseUp):', 'color: purple; font-weight: bold;');
-              console.log('Features returned:', features.length);
-              
-              // Process features to include properties and other metadata
-              const processedFeatures = features.map(item => ({
-                id: item.id,
-                title: item.properties?.title || item.id,
-                geometry: item.geometry || null,
-                bbox: item.bbox || null,
-                collection: item.collection || null,
-                properties: item.properties || {},
-                assetsCount: Object.keys(item.assets || {}).length,
-                datetime: item.properties?.datetime || item.properties?.start_datetime || null
-              }));
-              
-              // Only dispatch camera events after successful, non-aborted search
-              if (latestSearchIdRef.current === mySearchId && !controller.signal.aborted) {
-                window.dispatchEvent(new CustomEvent('showItemsOnMap', { detail: { items: processedFeatures, numberReturned: data.numberReturned, numberMatched: data.numberMatched, searchId: mySearchId } }));
-                // NOTE: Removed zoomToBbox dispatch - showItemsOnMapHandler handles camera movement
-                
-                // Dispatch bbox search nextLink to update pagination
-                const bboxNextLink = data.links?.find(l => l.rel === 'next')?.href;
-                if (bboxNextLink) {
-                  window.dispatchEvent(new CustomEvent('updateNextLink', { detail: { nextLink: bboxNextLink } }));
-                }
-                
-                // Optionally exit draw mode after search
-                setIsDrawingBbox(false);
-              } else {
-                console.log('🔄 Skipping camera events for aborted/stale bbox search (collection)');
-              }
-            }
-          } catch (err) {
-            if (err?.name === 'AbortError') {
-              console.log('BBox search aborted');
-            } else {
-              console.error('Error performing bbox GET /search:', err);
-            }
-          }
-        }}
         
         // This is the full-screen styling
         style={{ width: '100%', height: '100%' }}
@@ -1835,9 +1894,9 @@ function SFEOSMap() {
         // Basic interaction settings
         interactive={true}
         touchZoomRotate={true}
-        dragRotate={projection === 'mercator' && !isDrawingBbox}  // Disable drag rotation on globe
-        dragPan={!isDrawingBbox}
-        doubleClickZoom={!isDrawingBbox}
+        dragRotate={projection === 'mercator'}  // Disable drag rotation on globe
+        dragPan={true}
+        doubleClickZoom={true}
         scrollZoom={true}
         boxZoom={true}
         keyboard={true}
@@ -1858,6 +1917,33 @@ function SFEOSMap() {
         © <a href="https://maptiler.com/" target="_blank" rel="noopener noreferrer">MapTiler</a> | 
         © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
       </div>
+      {/* Polygon area display - bottom center */}
+      {drawnPolygonArea !== null && (
+        <div
+          className="calculation-box"
+          style={{
+            position: 'absolute',
+            bottom: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(255, 255, 255, 0.75)',
+            padding: '8px 16px',
+            textAlign: 'center',
+            fontFamily: 'Open Sans',
+            fontSize: 13,
+            borderRadius: 4,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            zIndex: 1000
+          }}
+        >
+          <p style={{ fontFamily: 'Open Sans', margin: 0, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <strong>{drawnPolygonArea}</strong>
+            <span style={{ marginLeft: '4px', fontSize: 11, color: '#666', fontWeight: 'normal' }}>
+              sq. km
+            </span>
+          </p>
+        </div>
+      )}
       {/* HH GH Logo in bottom right */}
       <div className="hh-gh-logo">
         <a href="https://github.com/Healy-Hyperspatial" target="_blank" rel="noopener noreferrer">

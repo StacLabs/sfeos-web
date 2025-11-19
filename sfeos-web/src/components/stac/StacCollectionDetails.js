@@ -385,6 +385,15 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return () => window.removeEventListener('cloudCoverFilterChanged', handler);
   }, []);
 
+  // Listen for hideLoading event to dismiss loading modal
+  useEffect(() => {
+    const handler = () => {
+      setIsLoadingItems(false);
+    };
+    window.addEventListener('hideLoading', handler);
+    return () => window.removeEventListener('hideLoading', handler);
+  }, []);
+
   // Listen for showItemDetails event to update the items list and hide loading indicator
   useEffect(() => {
     const handler = (event) => {
@@ -675,6 +684,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={itemLimitDisplay} 
+                  style={{ width: '45px' }}
                   onChange={(e) => {
                     const value = e.target.value;
                     // Allow empty string or valid digit sequences
@@ -703,8 +713,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 <button
                   type="button"
                   className={`bbox-btn ${isBboxModeOn ? 'bbox-on' : 'bbox-off'}`}
-                  title="Toggle BBox draw mode"
-                  aria-label="Toggle BBox draw mode"
+                  title="Toggle polygon draw mode"
+                  aria-label="Toggle polygon draw mode"
                   onClick={(e) => {
                     e.stopPropagation();
                     try {
@@ -714,7 +724,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     }
                   }}
                 >
-                  BBOX
+                  POLY
                 </button>
                 <button
                   type="button"
@@ -727,6 +737,32 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   }}
                 >
                   Filter
+                </button>
+                <button
+                  type="button"
+                  className="trash-btn"
+                  title="Clear polygon drawing"
+                  aria-label="Clear polygon drawing"
+                  style={{ 
+                    borderRadius: '8px', 
+                    height: '28px', 
+                    padding: '0 6px',
+                    fontSize: '14px',
+                    border: '1px solid #ccc'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    try {
+                      window.dispatchEvent(new CustomEvent('clearBbox'));
+                      window.dispatchEvent(new CustomEvent('clearSearchResults'));
+                      window.dispatchEvent(new CustomEvent('hideOverlays'));
+                      window.dispatchEvent(new CustomEvent('hideLoading'));
+                    } catch (err) {
+                      console.warn('Failed to dispatch clear events:', err);
+                    }
+                  }}
+                >
+                  🗑️
                 </button>
               </div>
               {queryItems.length > 0 ? (
@@ -802,7 +838,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 <div className="datetime-filter-content">
                   {/* Datetime Filter Section */}
                   <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #ddd' }}>
-                    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
                     <div className="datetime-filter-group">
                       <label htmlFor="start-date">Start Date:</label>
                       <input
@@ -827,7 +863,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
                   {/* Cloud Cover Filter Section */}
                   <div style={{ marginBottom: '20px' }}>
-                    <h4 style={{ margin: '0 0 2px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
                     <div className="datetime-filter-group">
                       <label htmlFor="cloud-cover-slider">Max Cloud Cover: {cloudCoverMax}%</label>
                       <input
@@ -837,7 +873,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                         max="100"
                         value={cloudCoverMax}
                         onChange={(e) => setCloudCoverMax(Number(e.target.value))}
-                        style={{ width: '200px' }}
+                        style={{ width: '180px' }}
                       />
                     </div>
                   </div>
@@ -858,7 +894,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                         setIsFilterOpen(false);
                         window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter } }));
                         window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter } }));
-                        window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                        window.dispatchEvent(new CustomEvent('runSearch', { detail: { limit: itemLimitRef.current } }));
                       }}
                     >
                       Apply
@@ -874,9 +910,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                         setAppliedDatetimeFilter('');
                         setAppliedCloudCoverFilter('');
                         appliedCloudCoverFilterRef.current = '';
-                        window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter: '' } }));
-                        window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter: '' } }));
-                        window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                        window.dispatchEvent(new CustomEvent('clearBbox'));
+                        window.dispatchEvent(new CustomEvent('clearSearchResults'));
+                        window.dispatchEvent(new CustomEvent('hideOverlays'));
+                        window.dispatchEvent(new CustomEvent('hideLoading'));
+                        window.dispatchEvent(new CustomEvent('toggleBboxSearch'));
                       }}
                     >
                       Clear All
@@ -1246,6 +1284,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 inputMode="numeric"
                 pattern="[0-9]*"
                 value={itemLimitDisplay} 
+                style={{ width: '45px' }}
                 onChange={(e) => {
                   const value = e.target.value;
                   // Allow empty string or valid digit sequences
@@ -1274,8 +1313,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
               <button
                 type="button"
                 className={`bbox-btn ${isBboxModeOn ? 'bbox-on' : 'bbox-off'}`}
-                title="Toggle BBox draw mode"
-                aria-label="Toggle BBox draw mode"
+                title="Toggle polygon draw mode"
+                aria-label="Toggle polygon draw mode"
                 onClick={(e) => {
                   e.stopPropagation();
                   try {
@@ -1285,7 +1324,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                   }
                 }}
               >
-                BBOX
+                POLY
               </button>
               <button
                 type="button"
@@ -1298,6 +1337,32 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                 }}
               >
                 Filter
+              </button>
+              <button
+                type="button"
+                className="trash-btn"
+                title="Clear polygon drawing"
+                aria-label="Clear polygon drawing"
+                style={{ 
+                  borderRadius: '8px', 
+                  height: '28px', 
+                  padding: '0 6px',
+                  fontSize: '14px',
+                  border: '1px solid #ccc'
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  try {
+                    window.dispatchEvent(new CustomEvent('clearBbox'));
+                    window.dispatchEvent(new CustomEvent('clearSearchResults'));
+                    window.dispatchEvent(new CustomEvent('hideOverlays'));
+                    window.dispatchEvent(new CustomEvent('hideLoading'));
+                  } catch (err) {
+                    console.warn('Failed to dispatch clear events:', err);
+                  }
+                }}
+              >
+                🗑️
               </button>
             </div>
             {queryItems.length > 0 ? (
@@ -1376,7 +1441,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
             <div className="datetime-filter-content">
               {/* Datetime Filter Section */}
               <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #ddd' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Date Range</h4>
                 <div className="datetime-filter-group">
                   <label htmlFor="start-date">Start Date:</label>
                   <input
@@ -1401,7 +1466,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
 
               {/* Cloud Cover Filter Section */}
               <div style={{ marginBottom: '10px' }}>
-                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '0.65rem', fontWeight: '400', color: '#666', textAlign: 'left' }}>Cloud Cover</h4>
                 <div className="datetime-filter-group">
                   <label htmlFor="cloud-cover-slider">Max Cloud Cover: {cloudCoverMax}%</label>
                   <input
@@ -1411,7 +1476,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     max="100"
                     value={cloudCoverMax}
                     onChange={(e) => setCloudCoverMax(Number(e.target.value))}
-                    style={{ width: '200px' }}
+                    style={{ maxWidth: '200px', width: '100%' }}
                   />
                 </div>
               </div>
@@ -1432,7 +1497,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     setIsFilterOpen(false);
                     window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter } }));
                     window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter } }));
-                    window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                    window.dispatchEvent(new CustomEvent('runSearch', { detail: { limit: itemLimitRef.current } }));
                   }}
                 >
                   Apply
@@ -1448,9 +1513,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
                     setAppliedDatetimeFilter('');
                     setAppliedCloudCoverFilter('');
                     appliedCloudCoverFilterRef.current = '';
-                    window.dispatchEvent(new CustomEvent('datetimeFilterChanged', { detail: { datetimeFilter: '' } }));
-                    window.dispatchEvent(new CustomEvent('cloudCoverFilterChanged', { detail: { cloudCoverFilter: '' } }));
-                    window.dispatchEvent(new CustomEvent('refetchQueryItems', { detail: { limit: itemLimitRef.current } }));
+                    window.dispatchEvent(new CustomEvent('clearBbox'));
+                    window.dispatchEvent(new CustomEvent('clearSearchResults'));
+                    window.dispatchEvent(new CustomEvent('hideOverlays'));
+                    window.dispatchEvent(new CustomEvent('hideLoading'));
+                    window.dispatchEvent(new CustomEvent('toggleBboxSearch'));
                   }}
                 >
                   Clear All
