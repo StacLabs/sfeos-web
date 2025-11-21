@@ -1915,7 +1915,8 @@ function SFEOSMap() {
       <div className="map-attribution">
         <a href="https://maplibre.org/" target="_blank" rel="noopener noreferrer">MapLibre</a> | 
         © <a href="https://maptiler.com/" target="_blank" rel="noopener noreferrer">MapTiler</a> | 
-        © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
+        © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> | 
+        © <a href="https://github.com/Healy-Hyperspatial" target="_blank" rel="noopener noreferrer">Healy-Hyperspatial</a>
       </div>
       {/* Polygon area display - bottom center */}
       {drawnPolygonArea !== null && (
