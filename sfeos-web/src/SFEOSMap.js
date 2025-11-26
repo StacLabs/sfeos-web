@@ -583,7 +583,6 @@ function SFEOSMap() {
     // Add the source if it doesn't exist
     if (!map.getSource(`geometry-${id}`)) {
       try {
-        console.log(`Adding source geometry-${id}`);
         map.addSource(`geometry-${id}`, {
           type: 'geojson',
           data: {
@@ -591,7 +590,6 @@ function SFEOSMap() {
             features: [geometryFeature]
           }
         });
-        console.log(`✅ Source added: geometry-${id}`);
         
         // Add the layer
         map.addLayer({
@@ -625,7 +623,6 @@ function SFEOSMap() {
       // Add click handler for item details if itemData is provided
       if (itemData) {
         map.on('click', `geometry-fill-${id}`, (e) => {
-          console.log('🖱️ Clicked on geometry:', id, itemData);
           
           // Select the item in the list (this triggers handleItemClick in StacCollectionDetails)
           window.dispatchEvent(new CustomEvent('selectItem', {
