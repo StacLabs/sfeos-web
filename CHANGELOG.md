@@ -17,11 +17,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
-- Using /search endpoint for polygon intersects search instead of /collections/{collectionId} for single collections querires. [#535](https://github.com/Healy-Hyperspatial/sfeos-web/pull/535)
+- Using /search endpoint for polygon intersects search instead of /collections/{collectionId} for single collections querires. [#22](https://github.com/Healy-Hyperspatial/sfeos-web/pull/22)
 
 ### Fixed
 
-- Fixed hover effect on Trash and Filter icons in the Item Search Box. [#535](https://github.com/Healy-Hyperspatial/sfeos-web/pull/535)
+- Fixed hover effect on Trash and Filter icons in the Item Search Box. [#22](https://github.com/Healy-Hyperspatial/sfeos-web/pull/22)
 
 [Unreleased]: https://github.com/Healy-Hyperspatial/sfeos-web/compare/v0.1.1...main
 [v0.1.1]: https://github.com/Healy-Hyperspatial/sfeos-web/compare/v0.1.0...v0.1.1
