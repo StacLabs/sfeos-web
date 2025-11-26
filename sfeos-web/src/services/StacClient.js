@@ -59,6 +59,10 @@ function StacClient({ stacApiUrl, onShowItemsOnMap: propOnShowItemsOnMap }) {
 
   const handleCollectionChange = (collection) => {
     setSelectedCollection(collection);
+    // Dispatch event to notify map component of collection selection
+    window.dispatchEvent(new CustomEvent('selectedCollectionChanged', { 
+      detail: { collectionId: collection?.id || null } 
+    }));
   };
 
   const handleZoomToBbox = (bbox) => {

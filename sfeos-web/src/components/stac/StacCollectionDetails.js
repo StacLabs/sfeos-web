@@ -24,6 +24,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   const [appliedDatetimeFilter, setAppliedDatetimeFilter] = useState('');
   const [cloudCoverMax, setCloudCoverMax] = useState(100);
   const [appliedCloudCoverFilter, setAppliedCloudCoverFilter] = useState('');
+  const [appliedIntersectsFilter, setAppliedIntersectsFilter] = useState('');
   const [isLoadingItems, setIsLoadingItems] = useState(false);
   const [isLoadingItemDetails, setIsLoadingItemDetails] = useState(false);
   const [hasPerformedSearch, setHasPerformedSearch] = useState(false);
@@ -32,6 +33,7 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   const itemLimitRef = useRef(itemLimit);
   const appliedDatetimeFilterRef = useRef('');
   const appliedCloudCoverFilterRef = useRef('');
+  const appliedIntersectsFilterRef = useRef('');
 
   // Define handleItemClick early to avoid use-before-define and conditional hook issues
   const handleItemClick = useCallback((item) => {
@@ -206,8 +208,8 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
   }, [itemLimit]);
 
   useEffect(() => {
-    appliedDatetimeFilterRef.current = appliedDatetimeFilter;
-  }, [appliedDatetimeFilter]);
+    appliedIntersectsFilterRef.current = appliedIntersectsFilter;
+  }, [appliedIntersectsFilter]);
 
   // Detect collection changes and reset state
   useEffect(() => {
@@ -319,7 +321,11 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
         let url;
         if (collection && collection.id) {
           // Regular collection-specific search
-          url = buildItemsUrl(baseUrl, collection.id, lim, datetimeFilter, cloudCoverFilter);
+          url = buildItemsUrl(baseUrl, collection.id, lim, datetimeFilter, cloudCoverFilter, appliedIntersectsFilterRef.current);
+          console.log('🔍 Collection-specific search for:', collection.id);
+          if (appliedIntersectsFilterRef.current) {
+            console.log('📐 Using polygon filter:', JSON.parse(appliedIntersectsFilterRef.current));
+          }
         } else {
           // All Collections search
           url = `${baseUrl}/search?limit=${lim}`;
@@ -329,7 +335,13 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
           if (cloudCoverFilter) {
             url += `&query=${encodeURIComponent(cloudCoverFilter)}`;
           }
+          if (appliedIntersectsFilterRef.current) {
+            url += `&intersects=${encodeURIComponent(appliedIntersectsFilterRef.current)}`;
+            console.log('📐 All collections search with polygon filter:', JSON.parse(appliedIntersectsFilterRef.current));
+          }
         }
+        
+        console.log('🔗 Collection details API request:', url);
         
         const response = await fetch(url);
         if (response.ok) {
@@ -376,13 +388,14 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return () => window.removeEventListener('datetimeFilterChanged', handler);
   }, []);
 
-  // Listen for cloudCoverFilterChanged event to show loading indicator
+  // Listen for intersectsFilterChanged event from map polygon changes
   useEffect(() => {
-    const handler = () => {
-      setIsLoadingItems(true);
+    const handler = (event) => {
+      const intersectsFilter = event?.detail?.intersectsFilter || '';
+      setAppliedIntersectsFilter(intersectsFilter);
     };
-    window.addEventListener('cloudCoverFilterChanged', handler);
-    return () => window.removeEventListener('cloudCoverFilterChanged', handler);
+    window.addEventListener('intersectsFilterChanged', handler);
+    return () => window.removeEventListener('intersectsFilterChanged', handler);
   }, []);
 
   // Listen for hideLoading event to dismiss loading modal
@@ -477,13 +490,16 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
     return () => window.removeEventListener('updateNextLink', handler);
   }, []);
 
-  const buildItemsUrl = (baseUrl, collectionId, limit, datetimeFilter, cloudCoverFilter) => {
-    let url = `${baseUrl}/collections/${collectionId}/items?limit=${limit}`;
+  const buildItemsUrl = (baseUrl, collectionId, limit, datetimeFilter, cloudCoverFilter, intersectsFilter) => {
+    let url = `${baseUrl}/search?collections=${encodeURIComponent(collectionId)}&limit=${limit}`;
     if (datetimeFilter) {
       url += `&datetime=${encodeURIComponent(datetimeFilter)}`;
     }
     if (cloudCoverFilter) {
       url += `&query=${encodeURIComponent(cloudCoverFilter)}`;
+    }
+    if (intersectsFilter) {
+      url += `&intersects=${encodeURIComponent(intersectsFilter)}`;
     }
     return url;
   };
@@ -1118,6 +1134,30 @@ function StacCollectionDetails({ collection, onZoomToBbox, onShowItemsOnMap, sta
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        
+        .trash-btn:hover {
+          cursor: pointer;
+          background-color: #f8f9fa;
+          border-color: #999;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .trash-btn:active {
+          background-color: #e9ecef;
+          transform: translateY(1px);
+        }
+        
+        .datetime-btn:hover {
+          cursor: pointer;
+          background-color: #f8f9fa;
+          border-color: #999;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .datetime-btn:active {
+          background-color: #e9ecef;
+          transform: translateY(1px);
         }
       `}</style>
       {hasValidTemporalExtent && (

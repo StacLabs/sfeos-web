@@ -117,9 +117,9 @@ function SFEOSMap() {
       let url;
       
       if (selectedCollectionId) {
-        // Single collection polygon search using collection-specific endpoint
+        // Single collection polygon search using search endpoint with collections parameter
         console.log('🔎 Searching within drawn polygon for collection:', selectedCollectionId);
-        url = `${baseUrl}/collections/${selectedCollectionId}/items?intersects=${encodeURIComponent(geoJson)}&limit=${encodeURIComponent(currentItemLimit)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
+        url = `${baseUrl}/search?collections=${encodeURIComponent(selectedCollectionId)}&intersects=${encodeURIComponent(geoJson)}&limit=${encodeURIComponent(currentItemLimit)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
       } else {
         // All collections polygon search
         console.log('🔎 Searching all collections within drawn polygon');
@@ -1613,8 +1613,9 @@ function SFEOSMap() {
         
         // Use different endpoints for single collection vs all collections
         if (selectedCollectionId) {
-          // Single collection endpoint
-          url = `${baseUrl}/collections/${selectedCollectionId}/items?limit=${encodeURIComponent(lim)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
+          // Single collection search - use /search endpoint with collections parameter
+          // This ensures polygon filtering works consistently
+          url = `${baseUrl}/search?collections=${encodeURIComponent(selectedCollectionId)}&limit=${encodeURIComponent(lim)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
         } else {
           // All collections search endpoint
           url = `${baseUrl}/search?limit=${encodeURIComponent(lim)}&fields=id,collection,bbox,geometry,properties.title,properties.datetime`;
@@ -1626,8 +1627,20 @@ function SFEOSMap() {
           const geoJson = JSON.stringify(polygon.geometry);
           url += `&intersects=${encodeURIComponent(geoJson)}`;
           console.log('🔎 Searching with drawn polygon');
+          console.log('📐 Polygon GeoJSON:', polygon.geometry);
+          console.log('🔗 Polygon intersects parameter:', geoJson);
+          
+          // Dispatch event to sync intersects filter with collection details
+          window.dispatchEvent(new CustomEvent('intersectsFilterChanged', { 
+            detail: { intersectsFilter: geoJson } 
+          }));
         } else {
           console.log('🔎 Searching without polygon - no features found');
+          
+          // Clear intersects filter when no polygon
+          window.dispatchEvent(new CustomEvent('intersectsFilterChanged', { 
+            detail: { intersectsFilter: '' } 
+          }));
         }
         
         // Add datetime filter if present
@@ -1646,6 +1659,8 @@ function SFEOSMap() {
         console.log('%c🔗 INITIAL MAP LOAD:', 'color: blue; font-weight: bold; font-size: 14px;');
         console.log('%cGET ' + url, 'color: green; font-family: monospace; font-size: 12px;');
         console.log('%c📋 Using fields extension for fast map display', 'color: orange; font-weight: bold;');
+        console.log('%c🔍 Complete API Request:', 'color: purple; font-weight: bold;');
+        console.log('%c' + url, 'color: purple; font-family: monospace; font-size: 11px;');
         lastSearchUrlRef.current = url; // Store for download
         window.dispatchEvent(new CustomEvent('hideOverlays'));
         
@@ -1767,6 +1782,11 @@ function SFEOSMap() {
           drawRef.current.deleteAll();
         }
         setDrawnPolygonArea(null);
+        
+        // Clear intersects filter when polygons are cleared
+        window.dispatchEvent(new CustomEvent('intersectsFilterChanged', { 
+          detail: { intersectsFilter: '' } 
+        }));
       }
     };
     window.addEventListener('clearBbox', clearBboxHandler);
@@ -1810,6 +1830,11 @@ function SFEOSMap() {
             drawRef.current.deleteAll();
           }
           setDrawnPolygonArea(null);
+          
+          // Clear intersects filter when polygons are cleared
+          window.dispatchEvent(new CustomEvent('intersectsFilterChanged', { 
+            detail: { intersectsFilter: '' } 
+          }));
         }
         
         // Clear any pending animations
@@ -2048,7 +2073,7 @@ function SFEOSMap() {
               <li><a href={`${stacApiUrl}/conformance`} target="_blank" rel="noreferrer">/conformance</a></li>
               <li><a href={`${stacApiUrl}/collections`} target="_blank" rel="noreferrer">/collections</a></li>
               {selectedCollectionId && (
-                <li><a href={`${stacApiUrl}/collections/${encodeURIComponent(selectedCollectionId)}/items?limit=${encodeURIComponent(currentItemLimit)}`} target="_blank" rel="noreferrer">/collections/{selectedCollectionId}/items</a></li>
+                <li><a href={`${stacApiUrl}/search?collections=${encodeURIComponent(selectedCollectionId)}&limit=${encodeURIComponent(currentItemLimit)}`} target="_blank" rel="noreferrer">/search?collections={selectedCollectionId}&limit={currentItemLimit}</a></li>
               )}
               <li><a href={`${stacApiUrl}/search?limit=${encodeURIComponent(currentItemLimit)}`} target="_blank" rel="noreferrer">/search?limit={currentItemLimit}</a></li>
             </ul>
