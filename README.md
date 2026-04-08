@@ -2,14 +2,14 @@
 
 Front-facing web interface for [SFEOS](https://github.com/stac-utils/stac-fastapi-elasticsearch-opensearch) - stac-fastapi-elasticsearch-opensearch   
 
-https://healy-hyperspatial.github.io/sfeos-web
+https://staclabs.github.io/sfeos-web
 
 ## Configuration
 
 You can override the default STAC API URL by appending the `stacApiUrl` parameter to the application URL:
 
 ```
-https://healy-hypersaptial.github.io/sfeos-web?stacApiUrl=http://localhost:8080
+https://staclabs.github.io/sfeos-web?stacApiUrl=https://example.com/stac
 ```
 
 **Note:** The parameter name `stacApiUrl` is case-sensitive.
